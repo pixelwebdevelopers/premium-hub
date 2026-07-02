@@ -1,49 +1,126 @@
+/* Premium Hub Custom Global Theme System */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Color Palette - Premium Light/Neutral Theme */
+  --bg-primary: #f8fafc;       /* Clean neutral background (slate-50) */
+  --bg-secondary: #ffffff;     /* Pure white for panels/cards */
+  --bg-tertiary: #f1f5f9;      /* Light gray for inputs (slate-100) */
+  
+  /* Sidebar Specific Colors (Strictly Black / Dark Theme) */
+  --sidebar-bg: #000000;       /* Solid pitch black for the sidebar */
+  --sidebar-hover: #16161a;    /* Sidebar hover state */
+  --sidebar-text-primary: #f8fafc;
+  --sidebar-text-secondary: #94a3b8;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+
+  --text-primary: #0f172a;     /* Dark slate for text (slate-900) */
+  --text-secondary: #475569;   /* Muted slate for descriptions (slate-600) */
+  --text-muted: #94a3b8;       /* Light gray for helpers/disabled (slate-400) */
+  
+  /* Brand Accent Colors */
+  --accent-purple: #8b5cf6;    /* Modern vibrant violet/purple */
+  --accent-purple-glow: rgba(139, 92, 246, 0.08);
+  --accent-blue: #3b82f6;      /* Electric blue */
+  --accent-blue-glow: rgba(59, 130, 246, 0.08);
+  
+  --success: #10b981;          /* Emerald green */
+  --success-glow: rgba(16, 185, 129, 0.08);
+  --warning: #f59e0b;          /* Soft amber */
+  --danger: #ef4444;           /* Coral red */
+  
+  /* Borders and Dividers */
+  --border-light: #e2e8f0;     /* slate-200 */
+  --border-medium: #cbd5e1;    /* slate-300 */
+  --border-focus: var(--accent-purple);
+  
+  /* Transitions & Shadows */
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.05);
+  
+  --border-radius-sm: 8px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 20px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-html {
-  height: 100%;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
+/* CSS Reset & General Setup */
 * {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Common Interactive Classes */
+button, input, select, textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+  transition: var(--transition-smooth);
+}
+
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-premium);
+}
+
+/* Keyframes for animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes rotateGlow {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+@keyframes pulseSoft {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '../../../../lib/db';
+import prisma from '../../../../lib/prisma';
 import { comparePassword, signJWT } from '../../../../lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-premium-hub-2026-xyz';
@@ -16,15 +16,16 @@ export async function POST(request: Request) {
     }
 
     // Query user by email
-    const [rows]: any = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-    if (!rows || rows.length === 0) {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
       return NextResponse.json(
         { error: 'Invalid email or password.' },
         { status: 401 }
       );
     }
-
-    const user = rows[0];
 
     // Verify password
     const isMatch = await comparePassword(password, user.password_hash);
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error: any) {
+  } catch (error) {
     console.error('Login API error:', error);
     return NextResponse.json(
       { error: 'Internal server error.' },

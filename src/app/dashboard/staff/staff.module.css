@@ -240,7 +240,7 @@
   bottom: 0;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(4px);
-  z-index: 200;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -319,9 +319,24 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--border-focus);
-  background: rgba(18, 18, 20, 0.9);
+  border-color: var(--accent-purple);
+  background: var(--bg-secondary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
 }
+
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover, 
+.input:-webkit-autofill:focus, 
+.input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-primary) !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-tertiary) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.input:focus:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-secondary) inset !important;
+}
+
 
 .modalFooter {
   display: flex;

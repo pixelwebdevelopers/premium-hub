@@ -17,6 +17,7 @@ import {
   X,
   LogOut,
   Loader2,
+  Wallet,
 } from 'lucide-react';
 
 interface UserPermissions {
@@ -115,6 +116,12 @@ export default function DashboardLayout({
       label: 'Subscriptions',
       icon: CreditCard,
       show: user.role === 'admin' || user.permissions.subscriptions,
+    },
+    {
+      href: '/dashboard/payments',
+      label: 'Payments',
+      icon: Wallet,
+      show: user.role === 'admin' || user.permissions.settings,
     },
     {
       href: '/dashboard/analytics',

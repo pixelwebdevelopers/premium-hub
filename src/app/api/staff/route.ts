@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import pool from '../../../lib/db';
+import prisma from '../../../lib/prisma';
 import { verifyJWT, hashPassword } from '../../../lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-premium-hub-2026-xyz';
@@ -21,17 +20,6 @@ async function authenticateAdmin(request: Request) {
   return decoded;
 }
 
-interface StaffDBRow extends RowDataPacket {
-  id: number;
-  name: string;
-  email: string;
-  role: string;
-  can_view_subscriptions: number;
-  can_view_analytics: number;
-  can_view_settings: number;
-  created_at: string;
-}
-
 // GET: Get all staff members (Admin only)
 export async function GET(request: Request) {
   try {
@@ -40,19 +28,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Access denied. Admins only.' }, { status: 403 });
     }
 
-    const [rows] = await pool.query<StaffDBRow[]>(
-      'SELECT id, name, email, role, can_view_subscriptions, can_view_analytics, can_view_settings, created_at FROM users WHERE role = "staff" ORDER BY created_at DESC'
-    );
+    const staff = await prisma.user.findMany({
+      where: { role: 'staff' },
+      orderBy: { created_at: 'desc' },
+    });
 
-    const staffList = rows.map((user: StaffDBRow) => ({
+    const staffList = staff.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       permissions: {
-        subscriptions: Boolean(user.can_view_subscriptions),
-        analytics: Boolean(user.can_view_analytics),
-        settings: Boolean(user.can_view_settings),
+        subscriptions: user.can_view_subscriptions,
+        analytics: user.can_view_analytics,
+        settings: user.can_view_settings,
       },
       created_at: user.created_at,
     }));
@@ -78,34 +67,43 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Name, email, and password are required.' }, { status: 400 });
     }
 
-    // Check if email already exists
-    const [existing] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing && existing.length > 0) {
+    // Check duplicate email
+    const existing = await prisma.user.findUnique({
+      where: { email },
+    });
+    if (existing) {
       return NextResponse.json({ error: 'Email already in use.' }, { status: 400 });
     }
 
     const passwordHash = await hashPassword(password);
-    const subPerm = permissions?.subscriptions ? 1 : 0;
-    const anaPerm = permissions?.analytics ? 1 : 0;
-    const setPerm = permissions?.settings ? 1 : 0;
+    const subPerm = permissions?.subscriptions ? true : false;
+    const anaPerm = permissions?.analytics ? true : false;
+    const setPerm = permissions?.settings ? true : false;
 
-    const [result] = await pool.query<ResultSetHeader>(
-      'INSERT INTO users (name, email, password_hash, role, can_view_subscriptions, can_view_analytics, can_view_settings) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, passwordHash, 'staff', subPerm, anaPerm, setPerm]
-    );
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password_hash: passwordHash,
+        role: 'staff',
+        can_view_subscriptions: subPerm,
+        can_view_analytics: anaPerm,
+        can_view_settings: setPerm,
+      },
+    });
 
     return NextResponse.json({
       success: true,
       message: 'Staff member created successfully.',
       staff: {
-        id: result.insertId,
-        name,
-        email,
-        role: 'staff',
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role,
         permissions: {
-          subscriptions: Boolean(subPerm),
-          analytics: Boolean(anaPerm),
-          settings: Boolean(setPerm),
+          subscriptions: newUser.can_view_subscriptions,
+          analytics: newUser.can_view_analytics,
+          settings: newUser.can_view_settings,
         },
       },
     });
@@ -130,61 +128,59 @@ export async function PUT(request: Request) {
     }
 
     // Check if staff member exists
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM users WHERE id = ? AND role = "staff"', [id]);
-    if (!rows || rows.length === 0) {
+    const user = await prisma.user.findFirst({
+      where: { id: Number(id), role: 'staff' },
+    });
+    if (!user) {
       return NextResponse.json({ error: 'Staff member not found.' }, { status: 404 });
     }
 
-    // Build update query
-    const updateFields = [];
-    const queryParams = [];
-
-    if (name) {
-      updateFields.push('name = ?');
-      queryParams.push(name);
-    }
-
-    if (email) {
-      // Check duplicate email
-      const [existing] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE email = ? AND id != ?', [email, id]);
-      if (existing && existing.length > 0) {
+    // Check duplicate email if changed
+    if (email && email !== user.email) {
+      const existing = await prisma.user.findUnique({
+        where: { email },
+      });
+      if (existing) {
         return NextResponse.json({ error: 'Email already in use.' }, { status: 400 });
       }
-      updateFields.push('email = ?');
-      queryParams.push(email);
     }
 
+    interface UserUpdateInput {
+      name?: string;
+      email?: string;
+      password_hash?: string;
+      can_view_subscriptions?: boolean;
+      can_view_analytics?: boolean;
+      can_view_settings?: boolean;
+    }
+
+    // Build update object
+    const updateData: UserUpdateInput = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
     if (password) {
-      const passwordHash = await hashPassword(password);
-      updateFields.push('password_hash = ?');
-      queryParams.push(passwordHash);
+      updateData.password_hash = await hashPassword(password);
     }
-
     if (permissions) {
       if (permissions.subscriptions !== undefined) {
-        updateFields.push('can_view_subscriptions = ?');
-        queryParams.push(permissions.subscriptions ? 1 : 0);
+        updateData.can_view_subscriptions = permissions.subscriptions;
       }
       if (permissions.analytics !== undefined) {
-        updateFields.push('can_view_analytics = ?');
-        queryParams.push(permissions.analytics ? 1 : 0);
+        updateData.can_view_analytics = permissions.analytics;
       }
       if (permissions.settings !== undefined) {
-        updateFields.push('can_view_settings = ?');
-        queryParams.push(permissions.settings ? 1 : 0);
+        updateData.can_view_settings = permissions.settings;
       }
     }
 
-    if (updateFields.length === 0) {
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No fields to update.' }, { status: 400 });
     }
 
-    // Append id to params and execute
-    queryParams.push(id);
-    await pool.query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
-      queryParams
-    );
+    await prisma.user.update({
+      where: { id: Number(id) },
+      data: updateData,
+    });
 
     return NextResponse.json({
       success: true,
@@ -211,12 +207,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Staff user ID is required.' }, { status: 400 });
     }
 
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT id FROM users WHERE id = ? AND role = "staff"', [id]);
-    if (!rows || rows.length === 0) {
+    const user = await prisma.user.findFirst({
+      where: { id: Number(id), role: 'staff' },
+    });
+    if (!user) {
       return NextResponse.json({ error: 'Staff member not found.' }, { status: 404 });
     }
 
-    await pool.query('DELETE FROM users WHERE id = ? AND role = "staff"', [id]);
+    await prisma.user.delete({
+      where: { id: Number(id) },
+    });
 
     return NextResponse.json({
       success: true,

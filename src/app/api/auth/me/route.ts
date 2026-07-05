@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import pool from '../../../../lib/db';
+import prisma from '../../../../lib/prisma';
 import { verifyJWT, signJWT } from '../../../../lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-premium-hub-2026-xyz';
@@ -17,30 +17,36 @@ export async function GET(request: Request) {
     }
 
     const token = tokenCookie.split('=')[1];
-    const decoded = await verifyJWT(token, JWT_SECRET);
+    interface JWTSessionPayload {
+      id: number;
+      name: string;
+      email: string;
+      role: string;
+      can_view_subscriptions: boolean;
+      can_view_analytics: boolean;
+      can_view_settings: boolean;
+    }
+    const decoded = (await verifyJWT(token, JWT_SECRET)) as JWTSessionPayload | null;
     if (!decoded) {
       return NextResponse.json({ error: 'Invalid session.' }, { status: 401 });
     }
 
     // Query database for latest user info
-    const [rows] = await pool.query<import('mysql2').RowDataPacket[]>(
-      'SELECT id, name, email, role, can_view_subscriptions, can_view_analytics, can_view_settings FROM users WHERE id = ?',
-      [decoded.id]
-    );
+    const user = await prisma.user.findUnique({
+      where: { id: Number(decoded.id) },
+    });
 
-    if (!rows || rows.length === 0) {
+    if (!user) {
       // User was deleted from the database
       const response = NextResponse.json({ error: 'User not found.' }, { status: 401 });
       response.cookies.set('auth-token', '', { maxAge: 0, path: '/' });
       return response;
     }
 
-    const user = rows[0];
-
     const dbPermissions = {
-      subscriptions: Boolean(user.can_view_subscriptions),
-      analytics: Boolean(user.can_view_analytics),
-      settings: Boolean(user.can_view_settings),
+      subscriptions: user.can_view_subscriptions,
+      analytics: user.can_view_analytics,
+      settings: user.can_view_settings,
     };
 
     // Check if the JWT permissions are outdated

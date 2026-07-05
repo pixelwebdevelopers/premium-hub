@@ -194,7 +194,8 @@ export default function StaffPage() {
   );
 
   return (
-    <div className="animate-fade-in">
+    <>
+      <div className="animate-fade-in">
       {/* Page Header */}
       <div className={styles.headerSection}>
         <div className={styles.titleWrapper}>
@@ -317,6 +318,7 @@ export default function StaffPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Add Staff Modal */}
       {isModalOpen && (
@@ -408,6 +410,6 @@ export default function StaffPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

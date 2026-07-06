@@ -18,6 +18,7 @@ import {
   LogOut,
   Loader2,
   Wallet,
+  ShoppingBag,
 } from 'lucide-react';
 
 interface UserPermissions {
@@ -110,6 +111,7 @@ export default function DashboardLayout({
   // Navigation Links mapping based on user permissions
   const navItems = [
     { href: '/dashboard', label: 'Overview', icon: Home, show: true },
+    { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag, show: true },
     { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },
     {
       href: '/dashboard/subscriptions',
@@ -163,7 +165,7 @@ export default function DashboardLayout({
             {isCollapsed ? (
               <div className={styles.faviconContainer}>
                 <Image
-                  src="/favicon.png"
+                  src="/favicon-v3.png"
                   alt="Premium Hub Favicon"
                   width={32}
                   height={32}
@@ -173,7 +175,7 @@ export default function DashboardLayout({
             ) : (
               <div className={styles.logoContainer}>
                 <Image
-                  src="/premium-hub-logo.png"
+                  src="/premium-hub-logo-v3.png"
                   alt="Premium Hub Logo"
                   width={190}
                   height={56}

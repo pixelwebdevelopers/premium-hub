@@ -79,3 +79,20 @@ model PaymentMethodCountry {
   @@map("payment_method_countries")
 }
 
+model Order {
+  id                Int      @id @default(autoincrement())
+  tracking_id       String   @unique @db.VarChar(100)
+  customer_name     String   @db.VarChar(255)
+  customer_email    String   @db.VarChar(255)
+  whatsapp_number   String   @db.VarChar(100)
+  screenshot_url    String   @db.VarChar(512)
+  status            String   @default("unpaid") @db.VarChar(50) // 'unpaid', 'paid', 'completed'
+  subscription_name String   @db.VarChar(255)
+  price             Decimal  @db.Decimal(10, 2)
+  currency          String   @db.VarChar(10)
+  created_at        DateTime @default(now()) @db.Timestamp(0)
+  updated_at        DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  @@map("orders")
+}
+

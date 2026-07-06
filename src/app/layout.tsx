@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Premium Hub - Admin Dashboard",
   description: "Premium subscription sales platform and role-based administration dashboard.",
   icons: {
-    icon: "/favicon.png",
+    icon: "/favicon-v3.png",
   },
 };
 

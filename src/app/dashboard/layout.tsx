@@ -19,6 +19,7 @@ import {
   Loader2,
   Wallet,
   ShoppingBag,
+  MessageSquare,
 } from 'lucide-react';
 
 interface UserPermissions {
@@ -112,6 +113,7 @@ export default function DashboardLayout({
   const navItems = [
     { href: '/dashboard', label: 'Overview', icon: Home, show: true },
     { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag, show: true },
+    { href: '/dashboard/chat', label: 'Support Chat', icon: MessageSquare, show: true },
     { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },
     {
       href: '/dashboard/subscriptions',
@@ -266,7 +268,9 @@ export default function DashboardLayout({
           </header>
 
           {/* Child pages view */}
-          <main className={styles.contentView}>{children}</main>
+          <main className={`${styles.contentView} ${pathname === '/dashboard/chat' ? styles.contentViewChat : ''}`}>
+            {children}
+          </main>
         </div>
       </div>
     </DashboardContext.Provider>

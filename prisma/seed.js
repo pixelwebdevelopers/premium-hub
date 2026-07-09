@@ -67,21 +67,24 @@ async function main() {
       logo_url: null,
       cover_url: null,
       is_global: true,
-      default_price: 15.99,
+      default_shared_price: 4.99,
+      default_private_price: 15.99,
       default_currency: 'USD',
       default_description: 'Watch Netflix movies & TV shows online or stream right to your smart TV, game console, PC, Mac, mobile, tablet and more.',
       countries: {
         create: [
           {
             country_code: 'IN',
-            price: 649.00,
+            shared_price: 199.00,
+            private_price: 649.00,
             currency: 'INR',
             description: 'Ultra HD streaming on 4 screens simultaneously. Localized Netflix IN package.',
             is_visible: true,
           },
           {
             country_code: 'DE',
-            price: 17.99,
+            shared_price: 5.99,
+            private_price: 17.99,
             currency: 'EUR',
             description: 'Unbegrenzter Film- und Seriengenuss in Ultra-HD-Qualität.',
             is_visible: true,
@@ -98,14 +101,14 @@ async function main() {
       logo_url: null,
       cover_url: null,
       is_global: true,
-      default_price: 9.99,
+      default_shared_price: 9.99,
       default_currency: 'USD',
       default_description: 'Play millions of songs ad-free, offline, and on-demand.',
       countries: {
         create: [
           {
             country_code: 'IN',
-            price: 119.00,
+            shared_price: 119.00,
             currency: 'INR',
             description: 'Ad-free offline music with high-quality streaming. Local Spotify Premium IN.',
             is_visible: true,
@@ -122,21 +125,21 @@ async function main() {
       logo_url: null,
       cover_url: null,
       is_global: false,
-      default_price: 11.99,
+      default_private_price: 11.99,
       default_currency: 'USD',
       default_description: 'YouTube and YouTube Music ad-free, offline, and in the background.',
       countries: {
         create: [
           {
             country_code: 'US',
-            price: 13.99,
+            private_price: 13.99,
             currency: 'USD',
             description: 'Ad-free YouTube with offline downloads and background play in the United States.',
             is_visible: true,
           },
           {
             country_code: 'GB',
-            price: 12.99,
+            private_price: 12.99,
             currency: 'GBP',
             description: 'Ad-free YouTube with offline downloads in the United Kingdom.',
             is_visible: true,

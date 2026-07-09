@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     });
 
     // Format Decimal fields to standard numbers
-    const formattedOrders = orders.map((order) => ({
+    const formattedOrders = orders.map((order: typeof orders[0]) => ({
       ...order,
       price: Number(order.price),
     }));

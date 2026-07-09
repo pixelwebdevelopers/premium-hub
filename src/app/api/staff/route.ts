@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       orderBy: { created_at: 'desc' },
     });
 
-    const staffList = staff.map((user) => ({
+    const staffList = staff.map((user: typeof staff[0]) => ({
       id: user.id,
       name: user.name,
       email: user.email,

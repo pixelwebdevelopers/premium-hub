@@ -4,7 +4,7 @@ import { verifyJWT } from './lib/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-premium-hub-2026-xyz';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('auth-token')?.value;
 
@@ -66,7 +66,7 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Config to run middleware only on specific paths
+// Config to run proxy only on specific paths
 export const config = {
   matcher: [
     '/',

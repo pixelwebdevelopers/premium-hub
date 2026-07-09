@@ -1,6 +1,16 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 
+const purgePrismaCache = () => {
+  if (typeof require !== 'undefined' && require.cache) {
+    Object.keys(require.cache).forEach((key) => {
+      if (key.includes('@prisma/client') || key.includes('.prisma/client')) {
+        delete require.cache[key];
+      }
+    });
+  }
+};
+
 const prismaClientSingleton = () => {
   const adapter = new PrismaMariaDb({
     host: process.env.DB_HOST || 'localhost',
@@ -10,7 +20,13 @@ const prismaClientSingleton = () => {
     database: process.env.DB_NAME || 'premium_hub',
     connectionLimit: 10,
   });
-  return new PrismaClient({ adapter });
+  
+  // eslint-disable-next-line
+  const FreshPrismaClient = typeof require !== 'undefined'
+    ? require('@prisma/client').PrismaClient
+    : PrismaClient;
+
+  return new FreshPrismaClient({ adapter });
 };
 
 declare const globalThis: {
@@ -20,7 +36,8 @@ declare const globalThis: {
 let prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
 // Self-healing: Recreate client if schema was updated but standard hot reload is using older global cached client
-if (prisma && !('paymentMethod' in prisma)) {
+if (prisma && (!('paymentMethod' in prisma) || !('chatSession' in prisma))) {
+  purgePrismaCache();
   prisma = prismaClientSingleton();
 }
 

@@ -18,7 +18,9 @@ import styles from './landing.module.css';
 interface SubscriptionCountryOverride {
   id: number;
   country_code: string;
-  price: number;
+  price: number | null;
+  shared_price: number | null;
+  private_price: number | null;
   currency: string;
   description: string;
   is_visible: boolean;
@@ -30,7 +32,9 @@ interface Subscription {
   logo_url: string | null;
   cover_url: string | null;
   is_global: boolean;
-  default_price: number;
+  default_price: number | null;
+  default_shared_price: number | null;
+  default_private_price: number | null;
   default_currency: string;
   default_description: string;
   countries: SubscriptionCountryOverride[];
@@ -241,17 +245,56 @@ export default function LandingPage() {
 
   const getSubDisplayPrice = (sub: Subscription) => {
     const override = sub.countries.find((c) => c.country_code === countryCode);
-    if (override) {
-      return {
-        price: override.price,
-        currency: override.currency,
-        description: override.description,
-      };
+    
+    const sharedPrice = override 
+      ? (override.shared_price !== null && override.shared_price !== undefined ? Number(override.shared_price) : null)
+      : (sub.default_shared_price !== null && sub.default_shared_price !== undefined ? Number(sub.default_shared_price) : null);
+      
+    const privatePrice = override 
+      ? (override.private_price !== null && override.private_price !== undefined ? Number(override.private_price) : null)
+      : (sub.default_private_price !== null && sub.default_private_price !== undefined ? Number(sub.default_private_price) : null);
+      
+    const legacyPrice = override 
+      ? (override.price !== null && override.price !== undefined ? Number(override.price) : null)
+      : (sub.default_price !== null && sub.default_price !== undefined ? Number(sub.default_price) : null);
+
+    const currency = override?.currency || sub.default_currency;
+    const description = override?.description || sub.default_description;
+
+    let finalPrice = legacyPrice || 0;
+    let prefix = '';
+    let label = '';
+    let pricingType: 'shared' | 'private' | 'both' = 'shared';
+
+    if (sharedPrice !== null && privatePrice !== null) {
+      finalPrice = Math.min(sharedPrice, privatePrice);
+      prefix = 'From ';
+      label = '';
+      pricingType = 'both';
+    } else if (sharedPrice !== null) {
+      finalPrice = sharedPrice;
+      prefix = '';
+      label = 'Shared';
+      pricingType = 'shared';
+    } else if (privatePrice !== null) {
+      finalPrice = privatePrice;
+      prefix = '';
+      label = 'Private';
+      pricingType = 'private';
+    } else if (legacyPrice !== null) {
+      finalPrice = legacyPrice;
+      prefix = '';
+      label = 'Shared'; // fallback to shared for legacy
+      pricingType = 'shared';
     }
+
     return {
-      price: sub.default_price,
-      currency: sub.default_currency,
-      description: sub.default_description,
+      price: finalPrice,
+      currency,
+      description,
+      prefix,
+      label,
+      pricingType,
     };
   };
 
@@ -467,7 +510,12 @@ export default function LandingPage() {
                   <div className={styles.cardBody}>
                     <div>
                       <h3 className={styles.cardTitle}>{sub.name}</h3>
-                      <div className={styles.cardPriceContainer}>
+                      <div className={styles.cardPriceContainer} style={{ flexWrap: 'wrap', gap: '4px' }}>
+                        {display.prefix && (
+                          <span style={{ fontSize: '13.5px', color: '#94a3b8', marginRight: '2px', alignSelf: 'center' }}>
+                            {display.prefix}
+                          </span>
+                        )}
                         <span className={styles.cardPrice}>
                           {display.price.toFixed(2)}
                         </span>
@@ -475,6 +523,23 @@ export default function LandingPage() {
                           {display.currency}
                         </span>
                         <span className={styles.cardPeriod}>/ month</span>
+                        {display.label && (
+                          <span style={{ 
+                            marginLeft: '8px', 
+                            fontSize: '11px', 
+                            fontWeight: 700, 
+                            color: '#c084fc', 
+                            background: 'rgba(192, 132, 252, 0.08)', 
+                            border: '1px solid rgba(192, 132, 252, 0.15)',
+                            padding: '2px 8px', 
+                            borderRadius: '12px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            alignSelf: 'center'
+                          }}>
+                            {display.label}
+                          </span>
+                        )}
                       </div>
                     </div>
 

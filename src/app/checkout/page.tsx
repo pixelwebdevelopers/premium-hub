@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { 
   Globe, 
-  X, 
   FileText, 
   Copy, 
   Loader2, 
@@ -21,7 +20,9 @@ import { uploadReceipt } from '../../lib/firebase';
 interface SubscriptionCountryOverride {
   id: number;
   country_code: string;
-  price: number;
+  price: number | null;
+  shared_price: number | null;
+  private_price: number | null;
   currency: string;
   description: string;
   is_visible: boolean;
@@ -33,7 +34,9 @@ interface Subscription {
   logo_url: string | null;
   cover_url: string | null;
   is_global: boolean;
-  default_price: number;
+  default_price: number | null;
+  default_shared_price: number | null;
+  default_private_price: number | null;
   default_currency: string;
   default_description: string;
   countries: SubscriptionCountryOverride[];
@@ -114,6 +117,10 @@ function CheckoutForm() {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [placedTrackingId, setPlacedTrackingId] = useState<string | null>(null);
   const [copiedTrackingId, setCopiedTrackingId] = useState(false);
+
+  // Selected pricing type & duration
+  const [selectedType, setSelectedType] = useState<'shared' | 'private'>('shared');
+  const [selectedDuration, setSelectedDuration] = useState<number>(1); // 1, 3, 6, 12
 
   // 1. Geolocation lookup
   useEffect(() => {
@@ -258,19 +265,86 @@ function CheckoutForm() {
 
   const activeSub = subscriptions.find((sub) => String(sub.id) === subId);
 
-  const getSubDisplayPrice = (sub: Subscription) => {
+
+
+  const getSubPricingOptions = (sub: Subscription) => {
     const override = sub.countries.find((c) => c.country_code === countryCode);
-    if (override) {
+    
+    const sharedPrice = override 
+      ? (override.shared_price !== null && override.shared_price !== undefined ? Number(override.shared_price) : null)
+      : (sub.default_shared_price !== null && sub.default_shared_price !== undefined ? Number(sub.default_shared_price) : null);
+      
+    const privatePrice = override 
+      ? (override.private_price !== null && override.private_price !== undefined ? Number(override.private_price) : null)
+      : (sub.default_private_price !== null && sub.default_private_price !== undefined ? Number(sub.default_private_price) : null);
+      
+    const legacyPrice = override 
+      ? (override.price !== null && override.price !== undefined ? Number(override.price) : null)
+      : (sub.default_price !== null && sub.default_price !== undefined ? Number(sub.default_price) : null);
+
+    const currency = override?.currency || sub.default_currency;
+    const description = override?.description || sub.default_description;
+
+    const hasShared = sharedPrice !== null;
+    const hasPrivate = privatePrice !== null;
+
+    if (!hasShared && !hasPrivate && legacyPrice !== null) {
       return {
-        price: override.price,
-        currency: override.currency,
-        description: override.description,
+        sharedPrice: legacyPrice,
+        privatePrice: 0,
+        hasShared: true,
+        hasPrivate: false,
+        currency,
+        description
       };
     }
+
     return {
-      price: sub.default_price,
-      currency: sub.default_currency,
-      description: sub.default_description,
+      sharedPrice: sharedPrice !== null ? sharedPrice : (legacyPrice || 0),
+      privatePrice: privatePrice !== null ? privatePrice : 0,
+      hasShared,
+      hasPrivate,
+      currency,
+      description
+    };
+  };
+
+  const pricingOptions = activeSub ? getSubPricingOptions(activeSub) : null;
+
+  const activeType = pricingOptions 
+    ? (pricingOptions.hasShared && selectedType === 'shared' ? 'shared' : (pricingOptions.hasPrivate ? 'private' : 'shared'))
+    : 'shared';
+
+  const getSelectedMonthlyPrice = () => {
+    if (!pricingOptions) return 0;
+    if (activeType === 'shared') {
+      return pricingOptions.sharedPrice;
+    } else {
+      return pricingOptions.privatePrice;
+    }
+  };
+
+  const calculatePricing = (monthlyPrice: number, duration: number) => {
+    const rawTotal = monthlyPrice * duration;
+    let discountMonths = 0;
+    
+    if (duration === 3) {
+      discountMonths = 0.5; // 15 days discount
+    } else if (duration === 6) {
+      discountMonths = 1; // 1 month discount
+    } else if (duration === 12) {
+      discountMonths = 2; // 2 months discount
+    }
+
+    const discountAmount = monthlyPrice * discountMonths;
+    const totalAmount = rawTotal - discountAmount;
+
+    return {
+      monthlyPrice,
+      duration,
+      rawTotal,
+      discountAmount,
+      totalAmount
     };
   };
 
@@ -305,12 +379,15 @@ function CheckoutForm() {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!checkoutName || !checkoutEmail || !checkoutWhatsapp || !receiptUrl || !activeSub) {
+    if (!checkoutName || !checkoutEmail || !checkoutWhatsapp || !receiptUrl || !activeSub || !pricingOptions) {
       setOrderError('Please complete all form fields and upload the payment receipt.');
       return;
     }
 
-    const priceDetails = getSubDisplayPrice(activeSub);
+    const monthlyPrice = getSelectedMonthlyPrice();
+    const billing = calculatePricing(monthlyPrice, selectedDuration);
+    const billingTypeLabel = activeType === 'shared' ? 'Shared' : 'Private';
+    const durationLabel = selectedDuration === 12 ? '1 Year' : `${selectedDuration} Month${selectedDuration > 1 ? 's' : ''}`;
 
     setIsSubmittingOrder(true);
     setOrderError(null);
@@ -326,9 +403,9 @@ function CheckoutForm() {
           customer_email: checkoutEmail,
           whatsapp_number: checkoutWhatsapp,
           screenshot_url: receiptUrl,
-          subscription_name: activeSub.name,
-          price: priceDetails.price,
-          currency: priceDetails.currency,
+          subscription_name: `${activeSub.name} - ${billingTypeLabel} (${durationLabel})`,
+          price: billing.totalAmount,
+          currency: pricingOptions.currency,
         }),
       });
 
@@ -387,7 +464,7 @@ function CheckoutForm() {
     );
   }
 
-  const subPriceDetails = getSubDisplayPrice(activeSub);
+
 
   return (
     <div className={styles.container}>
@@ -504,14 +581,120 @@ function CheckoutForm() {
               <div className={styles.detailsContent}>
                 <div>
                   <h2 className={styles.subName}>{activeSub.name}</h2>
-                  <div className={styles.priceBadge}>
-                    <span className={styles.price}>{subPriceDetails.price.toFixed(2)}</span>
-                    <span className={styles.currency}>{subPriceDetails.currency}</span>
-                    <span className={styles.period}>/ month</span>
-                  </div>
+                  
+                  {/* Pricing Type Toggle Tabs / Badge */}
+                  {pricingOptions && (
+                    <div style={{ marginTop: '16px' }}>
+                      {pricingOptions.hasShared && pricingOptions.hasPrivate ? (
+                        <div className={styles.tabsContainer}>
+                          <button
+                            type="button"
+                            className={`${styles.tabBtn} ${selectedType === 'shared' ? styles.tabBtnActive : ''}`}
+                            onClick={() => setSelectedType('shared')}
+                          >
+                            Shared Pricing
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.tabBtn} ${selectedType === 'private' ? styles.tabBtnActive : ''}`}
+                            onClick={() => setSelectedType('private')}
+                          >
+                            Private Pricing
+                          </button>
+                        </div>
+                      ) : (
+                        <div className={styles.badgeIndicator}>
+                          {pricingOptions.hasShared ? 'Shared Subscription' : 'Private Subscription'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2x2 Grid Package Duration Selector */}
+                  {pricingOptions && (() => {
+                    const monthlyPrice = getSelectedMonthlyPrice();
+                    const packages = [
+                      { duration: 1, label: '1 Month', desc: 'No discount' },
+                      { duration: 3, label: '3 Months', desc: '15 days free' },
+                      { duration: 6, label: '6 Months', desc: '1 month free' },
+                      { duration: 12, label: '1 Year', desc: '2 months free' },
+                    ];
+
+                    return (
+                      <div style={{ marginTop: '16px' }}>
+                        <span className={styles.formLabel} style={{ display: 'block', marginBottom: '8px' }}>Select Package Duration</span>
+                        <div className={styles.packageGrid}>
+                          {packages.map((pkg) => {
+                            const billing = calculatePricing(monthlyPrice, pkg.duration);
+                            const isActive = selectedDuration === pkg.duration;
+                            return (
+                              <div
+                                key={pkg.duration}
+                                className={`${styles.packageCard} ${isActive ? styles.packageCardActive : ''}`}
+                                onClick={() => setSelectedDuration(pkg.duration)}
+                              >
+                                <span className={styles.packageDuration}>{pkg.label}</span>
+                                <span className={styles.packagePrice}>
+                                  {billing.totalAmount.toFixed(2)} {pricingOptions.currency}
+                                </span>
+                                {billing.discountAmount > 0 ? (
+                                  <span className={styles.packageDiscount}>
+                                    Save {billing.discountAmount.toFixed(2)} {pricingOptions.currency}
+                                  </span>
+                                ) : (
+                                  <span className={styles.packageNoDiscount}>Standard rate</span>
+                                )}
+                                {isActive && (
+                                  <span className={styles.packageCheckmark}>✓</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Display Selected Summary Price */}
+                  {pricingOptions && (() => {
+                    const monthlyPrice = getSelectedMonthlyPrice();
+                    const billing = calculatePricing(monthlyPrice, selectedDuration);
+                    return (
+                      <div style={{
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        marginTop: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#94a3b8' }}>
+                          <span>Plan Rate ({selectedType === 'shared' ? 'Shared' : 'Private'}):</span>
+                          <span>{monthlyPrice.toFixed(2)} {pricingOptions.currency} / mo</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#94a3b8' }}>
+                          <span>Duration:</span>
+                          <span>{selectedDuration === 12 ? '1 Year' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}</span>
+                        </div>
+                        {billing.discountAmount > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#10b981', fontWeight: 600 }}>
+                            <span>Discount:</span>
+                            <span>-{billing.discountAmount.toFixed(2)} {pricingOptions.currency}</span>
+                          </div>
+                        )}
+                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '6px 0' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#ffffff' }}>
+                          <span>Total Amount:</span>
+                          <span style={{ color: '#c084fc' }}>{billing.totalAmount.toFixed(2)} {pricingOptions.currency}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                <p className={styles.description}>{subPriceDetails.description}</p>
+                <p className={styles.description}>{pricingOptions?.description}</p>
               </div>
             </div>
 
@@ -659,7 +842,9 @@ function CheckoutForm() {
                         <span>Submitting Order...</span>
                       </>
                     ) : (
-                      <span>Place Order ({subPriceDetails.price.toFixed(2)} {subPriceDetails.currency})</span>
+                      <span>
+                        Place Order ({pricingOptions ? calculatePricing(getSelectedMonthlyPrice(), selectedDuration).totalAmount.toFixed(2) : '0.00'} {pricingOptions?.currency})
+                      </span>
                     )}
                   </button>
                 </form>

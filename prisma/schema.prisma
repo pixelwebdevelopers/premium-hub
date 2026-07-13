@@ -20,6 +20,13 @@ model User {
   updated_at             DateTime      @default(now()) @updatedAt @db.Timestamp(0)
   assigned_chats         ChatSession[]
 
+  // Verification fields for customer registration
+  is_verified            Boolean       @default(false)
+  verification_code      String?       @db.VarChar(10)
+  verification_code_expires DateTime?
+
+  orders                 Order[]
+
   @@map("users")
 }
 
@@ -98,6 +105,14 @@ model Order {
   currency          String   @db.VarChar(10)
   created_at        DateTime @default(now()) @db.Timestamp(0)
   updated_at        DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  // Link to registered user account
+  userId            Int?
+  user              User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Subscription duration tracking
+  duration_months   Int      @default(1)
+  expires_at        DateTime?
 
   @@map("orders")
 }

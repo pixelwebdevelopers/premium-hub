@@ -32,8 +32,8 @@ interface UserProfile {
   id: number;
   name: string;
   email: string;
-  role: 'admin' | 'staff';
-  permissions: UserPermissions;
+  role: 'admin' | 'staff' | 'customer';
+  permissions?: UserPermissions;
 }
 
 interface DashboardContextType {
@@ -110,36 +110,44 @@ export default function DashboardLayout({
   if (!user) return null;
 
   // Navigation Links mapping based on user permissions
-  const navItems = [
-    { href: '/dashboard', label: 'Overview', icon: Home, show: true },
-    { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag, show: true },
-    { href: '/dashboard/chat', label: 'Support Chat', icon: MessageSquare, show: true },
-    { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },
-    {
-      href: '/dashboard/subscriptions',
-      label: 'Subscriptions',
-      icon: CreditCard,
-      show: user.role === 'admin' || user.permissions.subscriptions,
-    },
-    {
-      href: '/dashboard/payments',
-      label: 'Payments',
-      icon: Wallet,
-      show: user.role === 'admin' || user.permissions.settings,
-    },
-    {
-      href: '/dashboard/analytics',
-      label: 'Analytics',
-      icon: BarChart2,
-      show: user.role === 'admin' || user.permissions.analytics,
-    },
-    {
-      href: '/dashboard/settings',
-      label: 'Settings',
-      icon: Settings,
-      show: user.role === 'admin' || user.permissions.settings,
-    },
-  ];
+  const isCustomer = user.role === 'customer';
+
+  // Navigation Links mapping based on user permissions
+  const navItems = isCustomer
+    ? [
+        { href: '/dashboard', label: 'My Subscriptions', icon: CreditCard, show: true },
+        { href: '/', label: 'Place New Order', icon: ShoppingBag, show: true },
+      ]
+    : [
+        { href: '/dashboard', label: 'Overview', icon: Home, show: true },
+        { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag, show: true },
+        { href: '/dashboard/chat', label: 'Support Chat', icon: MessageSquare, show: true },
+        { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },
+        {
+          href: '/dashboard/subscriptions',
+          label: 'Subscriptions',
+          icon: CreditCard,
+          show: user.role === 'admin' || user.permissions?.subscriptions,
+        },
+        {
+          href: '/dashboard/payments',
+          label: 'Payments',
+          icon: Wallet,
+          show: user.role === 'admin' || user.permissions?.settings,
+        },
+        {
+          href: '/dashboard/analytics',
+          label: 'Analytics',
+          icon: BarChart2,
+          show: user.role === 'admin' || user.permissions?.analytics,
+        },
+        {
+          href: '/dashboard/settings',
+          label: 'Settings',
+          icon: Settings,
+          show: user.role === 'admin' || user.permissions?.settings,
+        },
+      ];
 
   const sidebarClass = `${styles.sidebar} ${isCollapsed ? styles.sidebarCollapsed : ''} ${
     isMobileOpen ? styles.sidebarActive : ''

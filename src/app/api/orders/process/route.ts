@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '../../../../lib/prisma';
 import { verifyJWT } from '../../../../lib/auth';
+import { sendEmail, getOrderEmailTemplate } from '../../../../lib/email';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-premium-hub-2026-xyz';
 
@@ -46,11 +47,60 @@ export async function POST(request: Request) {
       );
     }
 
+    // Get current order details
+    const order = await prisma.order.findUnique({
+      where: { id: Number(order_id) },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found.' }, { status: 404 });
+    }
+
+    const updateData: { status: string; expires_at?: Date } = { status };
+
+    if (status === 'completed') {
+      const duration = order.duration_months || 1;
+      const expiryDate = new Date();
+      expiryDate.setMonth(expiryDate.getMonth() + duration);
+      updateData.expires_at = expiryDate;
+    }
+
     // Update order
     const updatedOrder = await prisma.order.update({
       where: { id: Number(order_id) },
-      data: { status },
+      data: updateData,
     });
+
+    // Send email notification on status change
+    if (status === 'completed') {
+      await sendEmail({
+        to: order.customer_email,
+        subject: `Your Subscription is Active! [${order.tracking_id}]`,
+        html: getOrderEmailTemplate(
+          order.customer_name,
+          order.tracking_id,
+          order.subscription_name,
+          Number(order.price).toFixed(2),
+          order.currency,
+          'completed',
+          'Your account credentials or details will be sent by our staff shortly. You can now access your dashboard to view your subscription details!'
+        ),
+      });
+    } else if (status === 'paid') {
+      await sendEmail({
+        to: order.customer_email,
+        subject: `Payment Confirmed: Processing order [${order.tracking_id}]`,
+        html: getOrderEmailTemplate(
+          order.customer_name,
+          order.tracking_id,
+          order.subscription_name,
+          Number(order.price).toFixed(2),
+          order.currency,
+          'paid',
+          'We have verified your payment screenshot. Our team is setting up your subscription credentials now. We will notify you once active!'
+        ),
+      });
+    }
 
     return NextResponse.json({
       success: true,

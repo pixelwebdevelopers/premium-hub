@@ -11,7 +11,8 @@ import {
   X, 
   Loader2, 
   ArrowRight, 
-  AlertCircle
+  AlertCircle,
+  Layout
 } from 'lucide-react';
 import styles from './landing.module.css';
 
@@ -79,6 +80,24 @@ const LANGUAGES = [
 
 export default function LandingPage() {
   const router = useRouter();
+
+  const [user, setUser] = useState<any>(null);
+
+  // Check auth session
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error('Failed to load active session:', err);
+      }
+    }
+    checkAuth();
+  }, []);
 
   // Location & Geolocation state
   const [countryCode, setCountryCode] = useState('');
@@ -396,6 +415,26 @@ export default function LandingPage() {
             </select>
           </div>
 
+          {/* Dashboard / Account Button if logged in */}
+          {user ? (
+            <button
+              type="button"
+              className={styles.dashboardLinkBtn}
+              onClick={() => router.push('/dashboard')}
+            >
+              <Layout size={16} />
+              <span>Go to Dashboard</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.trackBtn}
+              onClick={() => router.push('/login')}
+            >
+              <span>Sign In</span>
+            </button>
+          )}
+
           <button
             type="button"
             className={styles.trackBtn}
@@ -449,19 +488,19 @@ export default function LandingPage() {
         {isLocating || isLoadingData ? (
           <div className={styles.grid}>
             {[1, 2, 3].map((n) => (
-              <div key={n} className={styles.card} style={{ minHeight: '340px', opacity: 0.6, pointerEvents: 'none', animation: 'skeletonPulse 1.5s ease-in-out infinite' }}>
+              <div key={n} className={styles.card} style={{ minHeight: '340px', opacity: 0.8, pointerEvents: 'none', animation: 'skeletonPulse 1.5s ease-in-out infinite' }}>
                 <div className={styles.coverImageWrapper}>
-                  <div className={styles.coverPlaceholder} style={{ background: 'linear-gradient(90deg, #13131a 25%, #1c1c24 50%, #13131a 75%)' }} />
-                  <div className={styles.logoOverlayWrapper} style={{ background: '#0a0a0e', borderColor: 'rgba(255,255,255,0.05)' }}>
+                  <div className={styles.coverPlaceholder} style={{ background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)' }} />
+                  <div className={styles.logoOverlayWrapper} style={{ background: '#ffffff', borderColor: '#e2e8f0' }}>
                     <Loader2 className={styles.spinner} size={16} color="#8b5cf6" />
                   </div>
                 </div>
                 <div className={styles.cardBody} style={{ gap: '12px' }}>
-                  <div style={{ height: '18px', background: 'rgba(255,255,255,0.06)', borderRadius: '4px', width: '60%' }} />
-                  <div style={{ height: '24px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px', width: '40%' }} />
-                  <div style={{ height: '14px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', width: '100%', marginTop: '8px' }} />
-                  <div style={{ height: '14px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', width: '80%' }} />
-                  <div style={{ height: '40px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', width: '100%', marginTop: 'auto' }} />
+                  <div style={{ height: '18px', background: 'rgba(0,0,0,0.06)', borderRadius: '4px', width: '60%' }} />
+                  <div style={{ height: '24px', background: 'rgba(0,0,0,0.04)', borderRadius: '4px', width: '40%' }} />
+                  <div style={{ height: '14px', background: 'rgba(0,0,0,0.03)', borderRadius: '4px', width: '100%', marginTop: '8px' }} />
+                  <div style={{ height: '14px', background: 'rgba(0,0,0,0.03)', borderRadius: '4px', width: '80%' }} />
+                  <div style={{ height: '40px', background: 'rgba(0,0,0,0.03)', borderRadius: '8px', width: '100%', marginTop: 'auto' }} />
                 </div>
               </div>
             ))}
@@ -528,9 +567,9 @@ export default function LandingPage() {
                             marginLeft: '8px', 
                             fontSize: '11px', 
                             fontWeight: 700, 
-                            color: '#c084fc', 
-                            background: 'rgba(192, 132, 252, 0.08)', 
-                            border: '1px solid rgba(192, 132, 252, 0.15)',
+                            color: '#7c3aed', 
+                            background: '#f5f3ff', 
+                            border: '1px solid #ddd6fe',
                             padding: '2px 8px', 
                             borderRadius: '12px',
                             textTransform: 'uppercase',
@@ -610,15 +649,15 @@ export default function LandingPage() {
 
             {trackedOrder && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-                <div style={{ paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <p style={{ fontSize: '13.5px', color: '#94a3b8' }}>
-                    Service Ordered: <strong style={{ color: '#ffffff' }}>{trackedOrder.subscription_name}</strong>
+                <div style={{ paddingBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
+                  <p style={{ fontSize: '13.5px', color: '#475569' }}>
+                    Service Ordered: <strong style={{ color: '#0f172a' }}>{trackedOrder.subscription_name}</strong>
                   </p>
-                  <p style={{ fontSize: '13.5px', color: '#94a3b8', marginTop: '4px' }}>
-                    Price paid: <strong style={{ color: '#c084fc' }}>{trackedOrder.price.toFixed(2)} {trackedOrder.currency}</strong>
+                  <p style={{ fontSize: '13.5px', color: '#475569', marginTop: '4px' }}>
+                    Price paid: <strong style={{ color: '#8b5cf6' }}>{trackedOrder.price.toFixed(2)} {trackedOrder.currency}</strong>
                   </p>
-                  <p style={{ fontSize: '13.5px', color: '#94a3b8', marginTop: '4px' }}>
-                    Date: <strong style={{ color: '#ffffff' }}>{new Date(trackedOrder.created_at).toLocaleDateString()}</strong>
+                  <p style={{ fontSize: '13.5px', color: '#475569', marginTop: '4px' }}>
+                    Date: <strong style={{ color: '#0f172a' }}>{new Date(trackedOrder.created_at).toLocaleDateString()}</strong>
                   </p>
                 </div>
 
@@ -634,7 +673,9 @@ export default function LandingPage() {
                   })()}
 
                   <div className={styles.timelineStep}>
-                    <div className={`${styles.stepCircle} ${styles.stepCircleActive}`}>
+                    <div className={`${styles.stepCircle} ${styles.stepCircleActive} ${
+                      getStatusStepIndex(trackedOrder.status) >= 1 ? styles.stepCircleCompleted : ''
+                    }`}>
                       {getStatusStepIndex(trackedOrder.status) >= 1 ? <Check size={14} /> : '1'}
                     </div>
                     <span className={`${styles.stepLabel} ${styles.stepLabelActive}`}>Placed</span>
@@ -642,7 +683,7 @@ export default function LandingPage() {
 
                   <div className={styles.timelineStep}>
                     <div className={`${styles.stepCircle} ${
-                      getStatusStepIndex(trackedOrder.status) >= 2 ? styles.stepCircleActive : ''
+                      getStatusStepIndex(trackedOrder.status) >= 2 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
                     }`}>
                       {getStatusStepIndex(trackedOrder.status) >= 2 ? <Check size={14} /> : '2'}
                     </div>
@@ -653,7 +694,7 @@ export default function LandingPage() {
 
                   <div className={styles.timelineStep}>
                     <div className={`${styles.stepCircle} ${
-                      getStatusStepIndex(trackedOrder.status) >= 3 ? styles.stepCircleActive : ''
+                      getStatusStepIndex(trackedOrder.status) >= 3 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
                     }`}>
                       {getStatusStepIndex(trackedOrder.status) >= 3 ? <Check size={14} /> : '3'}
                     </div>
@@ -663,8 +704,8 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <div style={{ textAlign: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '13.5px', color: '#94a3b8' }}>
+                <div style={{ textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13.5px', color: '#475569' }}>
                     Current Status: 
                   </span>
                   <span style={{ 

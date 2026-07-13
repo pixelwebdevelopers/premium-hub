@@ -12,7 +12,12 @@ import {
   ArrowLeft, 
   Check, 
   AlertCircle,
-  ShoppingBag
+  ShoppingBag,
+  Lock,
+  Mail,
+  User,
+  ShieldCheck,
+  RefreshCw
 } from 'lucide-react';
 import styles from './checkout.module.css';
 import { uploadReceipt } from '../../lib/firebase';
@@ -91,6 +96,9 @@ function CheckoutForm() {
   const router = useRouter();
   const subId = searchParams.get('id');
 
+  // Active user session
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
   // Country code state
   const [countryCode, setCountryCode] = useState('');
   const [countryName, setCountryName] = useState('');
@@ -112,6 +120,20 @@ function CheckoutForm() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptUrl, setReceiptUrl] = useState('');
 
+  // Account creation inputs (Optional)
+  const [createAccount, setCreateAccount] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Verification flow states
+  const [requiresVerification, setRequiresVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
@@ -121,6 +143,24 @@ function CheckoutForm() {
   // Selected pricing type & duration
   const [selectedType, setSelectedType] = useState<'shared' | 'private'>('shared');
   const [selectedDuration, setSelectedDuration] = useState<number>(1); // 1, 3, 6, 12
+
+  // Fetch logged-in user and fill details
+  useEffect(() => {
+    async function loadUser() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUser(data.user);
+          setCheckoutName(data.user.name);
+          setCheckoutEmail(data.user.email);
+        }
+      } catch (err) {
+        console.error('Failed to load active user profile:', err);
+      }
+    }
+    loadUser();
+  }, []);
 
   // 1. Geolocation lookup
   useEffect(() => {
@@ -248,7 +288,7 @@ function CheckoutForm() {
           setPaymentMethods(payData.paymentMethods);
         }
       } catch (err) {
-        console.error('Error loading landing page services:', err);
+        console.error('Error loading checkout page metadata:', err);
       } finally {
         setIsLoadingData(false);
       }
@@ -264,8 +304,6 @@ function CheckoutForm() {
   };
 
   const activeSub = subscriptions.find((sub) => String(sub.id) === subId);
-
-
 
   const getSubPricingOptions = (sub: Subscription) => {
     const override = sub.countries.find((c) => c.country_code === countryCode);
@@ -384,6 +422,17 @@ function CheckoutForm() {
       return;
     }
 
+    if (createAccount && !currentUser) {
+      if (password !== confirmPassword) {
+        setOrderError('Passwords do not match.');
+        return;
+      }
+      if (password.length < 6) {
+        setOrderError('Password must be at least 6 characters.');
+        return;
+      }
+    }
+
     const monthlyPrice = getSelectedMonthlyPrice();
     const billing = calculatePricing(monthlyPrice, selectedDuration);
     const billingTypeLabel = activeType === 'shared' ? 'Shared' : 'Private';
@@ -406,6 +455,9 @@ function CheckoutForm() {
           subscription_name: `${activeSub.name} - ${billingTypeLabel} (${durationLabel})`,
           price: billing.totalAmount,
           currency: pricingOptions.currency,
+          duration_months: selectedDuration,
+          create_account: createAccount,
+          password: createAccount ? password : undefined,
         }),
       });
 
@@ -415,10 +467,69 @@ function CheckoutForm() {
       }
 
       setPlacedTrackingId(data.tracking_id);
+
+      if (data.requires_verification) {
+        setVerificationEmail(data.email || checkoutEmail);
+        setRequiresVerification(true);
+      }
     } catch (err: any) {
       setOrderError(err.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSubmittingOrder(false);
+    }
+  };
+
+  const handleVerificationSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!verificationCode || !verificationEmail) return;
+
+    setIsVerifying(true);
+    setVerificationError(null);
+
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail, code: verificationCode }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Verification failed.');
+      }
+
+      // Verification success, hide OTP and go directly to success view
+      setRequiresVerification(false);
+    } catch (err: any) {
+      setVerificationError(err.message || 'Verification code invalid or expired.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!verificationEmail) return;
+    setIsResending(true);
+    setResendMessage(null);
+    setVerificationError(null);
+
+    try {
+      const res = await fetch('/api/auth/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verificationEmail }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to resend code.');
+      }
+
+      setResendMessage('A new verification code was sent to your email.');
+    } catch (err: any) {
+      setVerificationError(err.message || 'Failed to resend. Please try again later.');
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -463,8 +574,6 @@ function CheckoutForm() {
       </div>
     );
   }
-
-
 
   return (
     <div className={styles.container}>
@@ -522,7 +631,70 @@ function CheckoutForm() {
           <span>Back to Home</span>
         </Link>
 
-        {placedTrackingId ? (
+        {requiresVerification ? (
+          /* Email OTP Verification Screen */
+          <div className={`${styles.glassPanel} ${styles.confirmationContainer}`}>
+            <div className={styles.successIcon} style={{ borderColor: '#8b5cf6', background: 'rgba(139,92,246,0.1)', color: '#8b5cf6' }}>
+              <ShieldCheck size={40} />
+            </div>
+            <h2 style={{ fontSize: '24px', fontWeight: 800 }}>Verify Your Email</h2>
+            <p className={styles.confirmationInfo} style={{ maxWidth: '460px' }}>
+              We have created a pending account for you and sent a 6-digit OTP verification code to <strong style={{ color: '#ffffff' }}>{verificationEmail}</strong>. Please enter the code below to verify your account and complete your order.
+            </p>
+
+            <form onSubmit={handleVerificationSubmit} className={styles.form} style={{ width: '100%', maxWidth: '340px' }}>
+              <div className={styles.formGroup}>
+                <input
+                  type="text"
+                  maxLength={6}
+                  className={styles.formInput}
+                  style={{ textAlign: 'center', fontSize: '22px', letterSpacing: '8px', fontWeight: 'bold', fontFamily: 'monospace' }}
+                  placeholder="000000"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                  required
+                  disabled={isVerifying}
+                />
+              </div>
+
+              {verificationError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171', fontSize: '13px', justifyContent: 'center' }}>
+                  <AlertCircle size={16} />
+                  <span>{verificationError}</span>
+                </div>
+              )}
+
+              {resendMessage && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981', fontSize: '13px', justifyContent: 'center' }}>
+                  <Check size={16} />
+                  <span>{resendMessage}</span>
+                </div>
+              )}
+
+              <button type="submit" className={styles.submitBtn} disabled={isVerifying || verificationCode.length !== 6}>
+                {isVerifying ? (
+                  <>
+                    <Loader2 className={styles.spinner} size={18} />
+                    <span>Verifying Code...</span>
+                  </>
+                ) : (
+                  <span>Verify and Complete</span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                className={styles.backBtn}
+                style={{ alignSelf: 'center', gap: '4px', margin: '8px 0 0 0', cursor: 'pointer', background: 'none', border: 'none', fontSize: '13.5px' }}
+                onClick={handleResendCode}
+                disabled={isResending}
+              >
+                {isResending ? <Loader2 className={styles.spinner} size={14} /> : <RefreshCw size={14} />}
+                <span>Resend Code</span>
+              </button>
+            </form>
+          </div>
+        ) : placedTrackingId ? (
           /* Confirmation card (Success) */
           <div className={`${styles.glassPanel} ${styles.confirmationContainer}`}>
             <div className={styles.successIcon}>
@@ -530,7 +702,8 @@ function CheckoutForm() {
             </div>
             <h2 style={{ fontSize: '24px', fontWeight: 800 }}>Order Submitted Successfully!</h2>
             <p className={styles.confirmationInfo}>
-              Your subscription request has been received. Please copy the Order Tracking ID below. You can paste it into the homepage tracking tool to verify when credentials are delivered.
+              Your subscription request has been received. Please copy the Order Tracking ID below.
+              {createAccount || currentUser ? ' Since you have a verified account, you can log in to your dashboard to track subscription health.' : ' You can paste it into the homepage tracking tool to verify when credentials are delivered.'}
             </p>
 
             <div 
@@ -552,9 +725,25 @@ function CheckoutForm() {
               )}
             </div>
 
-            <Link href="/" className={styles.submitBtn} style={{ width: 'auto', padding: '0 32px', marginTop: '24px', textDecoration: 'none' }}>
-              Return to Homepage
-            </Link>
+            <div style={{ display: 'flex', gap: '16px', marginTop: '36px' }}>
+              {(createAccount || currentUser) ? (
+                <button 
+                  onClick={() => window.location.href = '/dashboard'} 
+                  className={styles.submitBtn} 
+                  style={{ textDecoration: 'none', padding: '0 32px' }}
+                >
+                  Go to Dashboard
+                </button>
+              ) : (
+                <button 
+                  onClick={() => router.push('/')} 
+                  className={styles.submitBtn} 
+                  style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', textDecoration: 'none', padding: '0 32px' }}
+                >
+                  Return to Homepage
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           /* Checkout Split Grid Layout */
@@ -661,20 +850,20 @@ function CheckoutForm() {
                     const billing = calculatePricing(monthlyPrice, selectedDuration);
                     return (
                       <div style={{
-                        background: 'rgba(255, 255, 255, 0.02)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        borderRadius: '12px',
-                        padding: '16px',
-                        marginTop: '20px',
+                        background: 'rgba(255,255,255,0.01)',
+                        border: '1px solid rgba(255,255,255,0.05)',
+                        borderRadius: '16px',
+                        padding: '20px',
+                        marginTop: '24px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '6px'
+                        gap: '8px'
                       }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#94a3b8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#9ca3af' }}>
                           <span>Plan Rate ({selectedType === 'shared' ? 'Shared' : 'Private'}):</span>
                           <span>{monthlyPrice.toFixed(2)} {pricingOptions.currency} / mo</span>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#94a3b8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#9ca3af' }}>
                           <span>Duration:</span>
                           <span>{selectedDuration === 12 ? '1 Year' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}</span>
                         </div>
@@ -684,8 +873,8 @@ function CheckoutForm() {
                             <span>-{billing.discountAmount.toFixed(2)} {pricingOptions.currency}</span>
                           </div>
                         )}
-                        <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.06)', margin: '6px 0' }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 800, color: '#ffffff' }}>
+                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.05)', margin: '8px 0' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: 800, color: '#ffffff' }}>
                           <span>Total Amount:</span>
                           <span style={{ color: '#c084fc' }}>{billing.totalAmount.toFixed(2)} {pricingOptions.currency}</span>
                         </div>
@@ -726,7 +915,7 @@ function CheckoutForm() {
                   {/* Payment instructions details */}
                   {activePaymentMethod && (
                     <div className={styles.paymentSection}>
-                      <p style={{ fontWeight: 600, fontSize: '13.5px', color: '#c084fc' }}>
+                      <p style={{ fontWeight: 600, fontSize: '13.5px', color: '#a78bfa' }}>
                         Instructions:
                       </p>
                       <p className={styles.instructionsBox}>{activePaymentMethod.instructions}</p>
@@ -763,6 +952,7 @@ function CheckoutForm() {
                       value={checkoutName}
                       onChange={(e) => setCheckoutName(e.target.value)}
                       required
+                      disabled={currentUser !== null}
                     />
                   </div>
 
@@ -776,6 +966,7 @@ function CheckoutForm() {
                       value={checkoutEmail}
                       onChange={(e) => setCheckoutEmail(e.target.value)}
                       required
+                      disabled={currentUser !== null}
                     />
                   </div>
 
@@ -791,6 +982,51 @@ function CheckoutForm() {
                       required
                     />
                   </div>
+
+                  {/* Account Creation Block (Optional, only for guests) */}
+                  {!currentUser && (
+                    <div style={{ marginTop: '8px' }}>
+                      <label className={styles.checkboxLabel}>
+                        <input
+                          type="checkbox"
+                          className={styles.checkboxInput}
+                          checked={createAccount}
+                          onChange={(e) => setCreateAccount(e.target.checked)}
+                        />
+                        <span>Create an account with this order (Optional)</span>
+                      </label>
+
+                      {createAccount && (
+                        <div className={styles.accountCreationBox}>
+                          <div className={styles.formGroup}>
+                            <label htmlFor="checkoutPassword" className={styles.formLabel}>Account Password</label>
+                            <input
+                              id="checkoutPassword"
+                              type="password"
+                              className={styles.formInput}
+                              placeholder="Min. 6 characters"
+                              value={password}
+                              onChange={(e) => setPassword(e.target.value)}
+                              required={createAccount}
+                            />
+                          </div>
+
+                          <div className={styles.formGroup}>
+                            <label htmlFor="checkoutConfirmPassword" className={styles.formLabel}>Confirm Password</label>
+                            <input
+                              id="checkoutConfirmPassword"
+                              type="password"
+                              className={styles.formInput}
+                              placeholder="Repeat password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              required={createAccount}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Receipt screenshot uploader */}
                   <div className={styles.formGroup}>
@@ -817,7 +1053,7 @@ function CheckoutForm() {
                         </span>
                       ) : (
                         <>
-                          <FileText size={24} style={{ color: '#475569' }} />
+                          <FileText size={24} style={{ color: '#4b5563' }} />
                           <span className={styles.fileInputText}>Select and upload payment receipt</span>
                         </>
                       )}

@@ -83,7 +83,7 @@ export default function PaymentsPage() {
   };
 
   useEffect(() => {
-    if (currentUser?.role === 'admin' || currentUser?.permissions.settings) {
+    if (currentUser?.role === 'admin' || currentUser?.permissions?.settings) {
       fetchPaymentMethods();
     }
   }, [currentUser]);
@@ -275,7 +275,7 @@ export default function PaymentsPage() {
     method.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (currentUser?.role !== 'admin' && !currentUser?.permissions.settings) {
+  if (currentUser?.role !== 'admin' && !currentUser?.permissions?.settings) {
     return (
       <div className={styles.emptyState}>
         <AlertTriangle size={48} style={{ color: 'var(--danger)' }} />

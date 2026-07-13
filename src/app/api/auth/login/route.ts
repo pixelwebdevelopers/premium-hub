@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
     // Query user by email
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: email.toLowerCase().trim() },
     });
 
     if (!user) {
@@ -33,6 +33,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Invalid email or password.' },
         { status: 401 }
+      );
+    }
+
+    // Check verification status for customers
+    if (user.role === 'customer' && !user.is_verified) {
+      return NextResponse.json(
+        { error: 'unverified', email: user.email },
+        { status: 403 }
       );
     }
 

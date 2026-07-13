@@ -43,6 +43,12 @@ export async function GET(request: Request) {
       return response;
     }
 
+    if (user.role === 'customer' && !user.is_verified) {
+      const response = NextResponse.json({ error: 'Account not verified.' }, { status: 401 });
+      response.cookies.set('auth-token', '', { maxAge: 0, path: '/' });
+      return response;
+    }
+
     const dbPermissions = {
       subscriptions: user.can_view_subscriptions,
       analytics: user.can_view_analytics,

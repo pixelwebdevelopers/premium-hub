@@ -1,24 +1,335 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDashboard } from './layout';
 import styles from './page.module.css';
 import {
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Users,
   CreditCard,
-  Activity,
   Globe2,
+  Calendar,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
+  AlertCircle
 } from 'lucide-react';
+
+interface Order {
+  id: number;
+  tracking_id: string;
+  customer_name: string;
+  customer_email: string;
+  whatsapp_number: string;
+  screenshot_url: string;
+  status: string;
+  subscription_name: string;
+  price: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+  userId: number | null;
+  duration_months: number;
+  expires_at: string | null;
+}
+
+interface Subscription {
+  id: number;
+  name: string;
+  logo_url: string | null;
+  cover_url: string | null;
+}
 
 export default function DashboardHome() {
   const { user } = useDashboard();
+  
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [clientSubs, setClientSubs] = useState<Subscription[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadDashboardData() {
+      try {
+        const [ordersRes, subsRes] = await Promise.all([
+          fetch('/api/orders'),
+          fetch('/api/subscriptions/client')
+        ]);
+
+        if (ordersRes.ok && subsRes.ok) {
+          const ordersData = await ordersRes.json();
+          const subsData = await subsRes.json();
+          setOrders(ordersData.orders || []);
+          setClientSubs(subsData.subscriptions || []);
+        } else {
+          setError('Failed to load user portal data.');
+        }
+      } catch (err) {
+        console.error(err);
+        setError('An error occurred while loading your subscriptions.');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadDashboardData();
+  }, [user]);
 
   if (!user) return null;
 
-  // Mock list of recent subscription transactions (representing selling subscriptions)
+  // Dynamically branch for CUSTOMER role
+  if (user.role === 'customer') {
+    if (isLoading) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '16px' }}>
+          <Loader2 className={styles.spinner} size={28} color="#8b5cf6" />
+          <span style={{ color: '#94a3b8', fontSize: '14px' }}>Loading subscriptions...</span>
+        </div>
+      );
+    }
+
+    // Process subscriptions and orders
+    const now = new Date();
+
+    const activeSubs = orders.filter(o => {
+      if (o.status !== 'completed') return false;
+      const expiry = o.expires_at ? new Date(o.expires_at) : new Date(new Date(o.created_at).setMonth(new Date(o.created_at).getMonth() + o.duration_months));
+      return expiry > now;
+    });
+
+    const expiredSubs = orders.filter(o => {
+      if (o.status !== 'completed') return false;
+      const expiry = o.expires_at ? new Date(o.expires_at) : new Date(new Date(o.created_at).setMonth(new Date(o.created_at).getMonth() + o.duration_months));
+      return expiry <= now;
+    });
+
+    const pendingOrders = orders.filter(o => o.status === 'unpaid' || o.status === 'paid');
+
+    const getRemainingDays = (expiryStr: string | null, createdStr: string, duration: number) => {
+      const expiry = expiryStr ? new Date(expiryStr) : new Date(new Date(createdStr).setMonth(new Date(createdStr).getMonth() + duration));
+      const diffTime = expiry.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : 0;
+    };
+
+    const findRenewalId = (orderSubName: string) => {
+      // Extract main service name, e.g., "Netflix Premium - Shared (3 Months)" -> "Netflix Premium"
+      const mainName = orderSubName.split(' - ')[0].trim();
+      const matched = clientSubs.find(s => s.name.toLowerCase() === mainName.toLowerCase());
+      return matched ? matched.id : null;
+    };
+
+    return (
+      <div className="animate-fade-in">
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f87171', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px', padding: '12px 16px', marginBottom: '20px', fontSize: '13.5px' }}>
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+        {/* Welcome Customer Banner */}
+        <div className={styles.welcomeCard}>
+          <h1 className={styles.welcomeTitle}>Hello, {user.name}!</h1>
+          <p className={styles.welcomeDesc}>
+            Manage and view your active premium subscriptions here. You can renew expired packages or place new orders directly.
+          </p>
+        </div>
+
+        {/* Customer Stats Row */}
+        <div className={styles.statsGrid}>
+          <div className={`${styles.statCard} glassmorphism`}>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Active Subscriptions</span>
+              <div className={`${styles.iconWrapper} ${styles.iconGreen}`}>
+                <CheckCircle2 size={20} />
+              </div>
+            </div>
+            <div className={styles.statValue}>{activeSubs.length}</div>
+            <div className={styles.statFooter}>
+              <span className={styles.trendMuted}>Fully setup and ready to use</span>
+            </div>
+          </div>
+
+          <div className={`${styles.statCard} glassmorphism`}>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Pending Verification</span>
+              <div className={`${styles.iconWrapper} ${styles.iconAmber}`}>
+                <Clock size={20} />
+              </div>
+            </div>
+            <div className={styles.statValue}>{pendingOrders.length}</div>
+            <div className={styles.statFooter}>
+              <span className={styles.trendMuted}>Awaiting receipt verification</span>
+            </div>
+          </div>
+
+          <div className={`${styles.statCard} glassmorphism`}>
+            <div className={styles.statHeader}>
+              <span className={styles.statLabel}>Expired Packages</span>
+              <div className={`${styles.iconWrapper} ${styles.iconPurple}`}>
+                <AlertTriangle size={20} />
+              </div>
+            </div>
+            <div className={styles.statValue}>{expiredSubs.length}</div>
+            <div className={styles.statFooter}>
+              <span className={styles.trendMuted}>Eligible for instant renewal</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Subscriptions Grid */}
+        <div style={{ marginTop: '36px' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#ffffff', marginBottom: '16px' }}>My Active Subscriptions</h2>
+          {activeSubs.length === 0 ? (
+            <div className={`${styles.panel} glassmorphism`} style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+              <CreditCard size={32} style={{ marginBottom: '12px', color: '#4b5563' }} />
+              <p>You have no active premium subscriptions at this time.</p>
+              <button 
+                onClick={() => window.location.href = '/'}
+                className={styles.welcomeDesc} 
+                style={{ background: '#8b5cf6', color: '#ffffff', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '13.5px', fontWeight: 600, marginTop: '16px', cursor: 'pointer' }}
+              >
+                Browse Services
+              </button>
+            </div>
+          ) : (
+            <div className={styles.customerSubGrid}>
+              {activeSubs.map((sub) => {
+                const daysLeft = getRemainingDays(sub.expires_at, sub.created_at, sub.duration_months);
+                return (
+                  <div key={sub.id} className={`${styles.customerSubCard} glassmorphism`}>
+                    <div className={styles.customerSubHeader}>
+                      <div>
+                        <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff' }}>{sub.subscription_name}</h3>
+                        <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>ID: {sub.tracking_id}</span>
+                      </div>
+                      <span className={styles.badgeSuccess}>Active</span>
+                    </div>
+
+                    <div className={styles.customerSubBody}>
+                      <div className={styles.infoRow}>
+                        <Calendar size={14} style={{ color: '#8b5cf6' }} />
+                        <span>Expires on: {sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : 'N/A'}</span>
+                      </div>
+
+                      {/* Circular Progress Bar Indicator */}
+                      <div className={styles.progressSection}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                          <span style={{ color: '#94a3b8' }}>Subscription status</span>
+                          <span style={{ color: '#10b981', fontWeight: 700 }}>{daysLeft} days left</span>
+                        </div>
+                        <div className={styles.progressBarBg}>
+                          <div 
+                            className={styles.progressBarFill} 
+                            style={{ width: `${Math.min(100, (daysLeft / (sub.duration_months * 30)) * 100)}%` }} 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Expired and Pending Split Grid */}
+        <div className={styles.dashboardGrid} style={{ marginTop: '36px' }}>
+          
+          {/* Pending Orders Awaiting Review */}
+          <div className={`${styles.panel} glassmorphism`}>
+            <h3 className={styles.panelTitle}>Pending Orders</h3>
+            {pendingOrders.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13.5px' }}>
+                <CheckCircle2 size={24} style={{ color: '#10b981', marginBottom: '8px' }} />
+                <p>No orders pending. All payments are verified!</p>
+              </div>
+            ) : (
+              <div className={styles.tableWrapper}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th className={styles.th}>Tracking ID</th>
+                      <th className={styles.th}>Service Name</th>
+                      <th className={styles.th}>Price Paid</th>
+                      <th className={styles.th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingOrders.map((ord) => (
+                      <tr key={ord.id}>
+                        <td className={styles.td} style={{ fontFamily: 'monospace', fontWeight: 600 }}>{ord.tracking_id}</td>
+                        <td className={styles.td}>{ord.subscription_name}</td>
+                        <td className={styles.td} style={{ color: '#a78bfa', fontWeight: 600 }}>{Number(ord.price).toFixed(2)} {ord.currency}</td>
+                        <td className={styles.td}>
+                          <span className={`${styles.badge} ${ord.status === 'paid' ? styles.badgeSuccess : styles.badgeWarning}`}>
+                            {ord.status === 'paid' ? 'Paid' : 'Unpaid'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Expired Subscriptions for Renewal */}
+          <div className={`${styles.panel} glassmorphism`}>
+            <h3 className={styles.panelTitle}>Expired Subscriptions</h3>
+            {expiredSubs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13.5px' }}>
+                <Clock size={24} style={{ color: '#6b7280', marginBottom: '8px' }} />
+                <p>No expired subscriptions to renew.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {expiredSubs.map((sub) => {
+                  const renewalId = findRenewalId(sub.subscription_name);
+                  return (
+                    <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', padding: '12px 16px', borderRadius: '12px' }}>
+                      <div>
+                        <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>{sub.subscription_name}</h4>
+                        <span style={{ fontSize: '12px', color: '#6b7280' }}>Expired on: {sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : 'N/A'}</span>
+                      </div>
+                      {renewalId && (
+                        <button
+                          onClick={() => window.location.href = `/checkout?id=${renewalId}`}
+                          style={{
+                            background: '#8b5cf6',
+                            border: 'none',
+                            color: '#ffffff',
+                            borderRadius: '8px',
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <span>Renew</span>
+                          <ArrowRight size={12} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // REST OF CODE: Original staff/admin dashboard
   const recentPurchases = [
     { id: 'TXN-9081', user: 'Sarah Jenkins', package: 'Enterprise Monthly', amount: '$149.00', country: 'United States', status: 'Completed' },
     { id: 'TXN-9080', user: 'Kenji Sato', package: 'Developer Annual', amount: '$499.00', country: 'Japan', status: 'Completed' },
@@ -27,7 +338,6 @@ export default function DashboardHome() {
     { id: 'TXN-9077', user: 'Liam Wilson', package: 'Pro Monthly', amount: '$49.00', country: 'United Kingdom', status: 'Completed' },
   ];
 
-  // Mock list of global system logs
   const systemLogs = [
     { text: 'Dynamic country router configured localized currency for Canada (CAD).', time: '10 minutes ago' },
     { text: 'Sarah Jenkins purchased "Enterprise Monthly" subscription package.', time: '24 minutes ago' },
@@ -165,5 +475,31 @@ export default function DashboardHome() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Inline fallback loader helper
+function Loader2({ className, size, color }: { className?: string, size?: number, color?: string }) {
+  return (
+    <svg 
+      className={className} 
+      width={size || 24} 
+      height={size || 24} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke={color || "currentColor"} 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    >
+      <line x1="12" y1="2" x2="12" y2="6"></line>
+      <line x1="12" y1="18" x2="12" y2="22"></line>
+      <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+      <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+      <line x1="2" y1="12" x2="6" y2="12"></line>
+      <line x1="18" y1="12" x2="22" y2="12"></line>
+      <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+      <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
+    </svg>
   );
 }

@@ -370,3 +370,47 @@
     transform: rotate(360deg);
   }
 }
+
+/* Responsive Overrides for Laptop and Mobile Views */
+
+/* Shorter Laptop Screen Heights */
+@media (max-height: 768px) and (min-width: 481px) {
+  .dialogWindow {
+    height: 420px;
+    bottom: 76px;
+  }
+}
+
+/* Narrow Laptop / Tablet Screen Widths */
+@media (max-width: 768px) and (min-width: 481px) {
+  .dialogWindow {
+    width: 320px;
+  }
+}
+
+/* Mobile Screen Sizes */
+@media (max-width: 480px) {
+  .dialogWindow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    border-radius: 0;
+    border: none;
+    z-index: 10000;
+  }
+
+  .widgetContainer {
+    bottom: 16px;
+    right: 16px;
+  }
+
+  .triggerBtn {
+    width: 52px;
+    height: 52px;
+  }
+}
+

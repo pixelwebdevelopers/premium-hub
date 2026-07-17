@@ -112,12 +112,7 @@ export default function LandingPage() {
   // Active language state
   const [activeLang, setActiveLang] = useState('en');
 
-  // Tracking Modal states
-  const [trackModalOpen, setTrackModalOpen] = useState(false);
-  const [trackingIdInput, setTrackingIdInput] = useState('');
-  const [trackedOrder, setTrackedOrder] = useState<OrderDetails | null>(null);
-  const [trackError, setTrackError] = useState<string | null>(null);
-  const [isTracking, setIsTracking] = useState(false);
+
 
   // 1. Fetch Geolocation on mount
   useEffect(() => {
@@ -317,30 +312,7 @@ export default function LandingPage() {
     };
   };
 
-  const handleTrackOrderSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!trackingIdInput) return;
 
-    setIsTracking(true);
-    setTrackError(null);
-    setTrackedOrder(null);
-
-    try {
-      const response = await fetch(`/api/orders/track?id=${trackingIdInput.trim()}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Tracking details not found.');
-      }
-
-      setTrackedOrder(data.order);
-    } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Tracking search failed.';
-      setTrackError(errorMessage);
-    } finally {
-      setIsTracking(false);
-    }
-  };
 
   const getStatusStepIndex = (status: string) => {
     if (status === 'completed') return 3;
@@ -357,7 +329,7 @@ export default function LandingPage() {
       <header className={styles.header}>
         <div className={styles.logoWrapper} onClick={() => window.location.reload()}>
           <Image
-            src="/premium-hub-logo-v3.png"
+            src="/premium-hub-logo-v4.png"
             alt="Premium Hub Logo"
             width={180}
             height={50}
@@ -435,19 +407,6 @@ export default function LandingPage() {
             </button>
           )}
 
-          <button
-            type="button"
-            className={styles.trackBtn}
-            onClick={() => {
-              setTrackModalOpen(true);
-              setTrackedOrder(null);
-              setTrackingIdInput('');
-              setTrackError(null);
-            }}
-          >
-            <ShoppingBag size={16} />
-            <span>Track Order</span>
-          </button>
         </div>
       </header>
 
@@ -599,130 +558,6 @@ export default function LandingPage() {
           </div>
         )}
       </main>
-
-      {/* Track Order Modal */}
-      {trackModalOpen && (
-        <div className={styles.modalOverlay} onClick={() => setTrackModalOpen(false)}>
-          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h2 className={styles.modalTitle}>Track Order</h2>
-              <button
-                type="button"
-                className={styles.closeBtn}
-                onClick={() => setTrackModalOpen(false)}
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleTrackOrderSubmit} className={styles.form}>
-              <div className={styles.formGroup}>
-                <label htmlFor="trackingId" className={styles.formLabel}>Enter Order Tracking ID</label>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input
-                    id="trackingId"
-                    type="text"
-                    className={styles.formInput}
-                    placeholder="PH-XXXXXX"
-                    value={trackingIdInput}
-                    onChange={(e) => setTrackingIdInput(e.target.value)}
-                    required
-                  />
-                  <button
-                    type="submit"
-                    className={styles.trackBtn}
-                    style={{ background: '#8b5cf6', borderColor: '#8b5cf6', height: '42px' }}
-                    disabled={isTracking}
-                  >
-                    {isTracking ? <Loader2 className={styles.spinner} size={16} /> : 'Search'}
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {trackError && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#f87171', fontSize: '13px' }}>
-                <AlertCircle size={16} />
-                <span>{trackError}</span>
-              </div>
-            )}
-
-            {trackedOrder && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '10px' }}>
-                <div style={{ paddingBottom: '10px', borderBottom: '1px solid #e2e8f0' }}>
-                  <p style={{ fontSize: '13.5px', color: '#475569' }}>
-                    Service Ordered: <strong style={{ color: '#0f172a' }}>{trackedOrder.subscription_name}</strong>
-                  </p>
-                  <p style={{ fontSize: '13.5px', color: '#475569', marginTop: '4px' }}>
-                    Price paid: <strong style={{ color: '#8b5cf6' }}>{trackedOrder.price.toFixed(2)} {trackedOrder.currency}</strong>
-                  </p>
-                  <p style={{ fontSize: '13.5px', color: '#475569', marginTop: '4px' }}>
-                    Date: <strong style={{ color: '#0f172a' }}>{new Date(trackedOrder.created_at).toLocaleDateString()}</strong>
-                  </p>
-                </div>
-
-                <div className={styles.timeline}>
-                  <div className={styles.timelineLine} />
-                  
-                  {(() => {
-                    const step = getStatusStepIndex(trackedOrder.status);
-                    let w = '0%';
-                    if (step === 2) w = '50%';
-                    if (step === 3) w = '100%';
-                    return <div className={styles.timelineLineActive} style={{ width: w }} />;
-                  })()}
-
-                  <div className={styles.timelineStep}>
-                    <div className={`${styles.stepCircle} ${styles.stepCircleActive} ${
-                      getStatusStepIndex(trackedOrder.status) >= 1 ? styles.stepCircleCompleted : ''
-                    }`}>
-                      {getStatusStepIndex(trackedOrder.status) >= 1 ? <Check size={14} /> : '1'}
-                    </div>
-                    <span className={`${styles.stepLabel} ${styles.stepLabelActive}`}>Placed</span>
-                  </div>
-
-                  <div className={styles.timelineStep}>
-                    <div className={`${styles.stepCircle} ${
-                      getStatusStepIndex(trackedOrder.status) >= 2 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
-                    }`}>
-                      {getStatusStepIndex(trackedOrder.status) >= 2 ? <Check size={14} /> : '2'}
-                    </div>
-                    <span className={`${styles.stepLabel} ${
-                      getStatusStepIndex(trackedOrder.status) >= 2 ? styles.stepLabelActive : ''
-                    }`}>Verified</span>
-                  </div>
-
-                  <div className={styles.timelineStep}>
-                    <div className={`${styles.stepCircle} ${
-                      getStatusStepIndex(trackedOrder.status) >= 3 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
-                    }`}>
-                      {getStatusStepIndex(trackedOrder.status) >= 3 ? <Check size={14} /> : '3'}
-                    </div>
-                    <span className={`${styles.stepLabel} ${
-                      getStatusStepIndex(trackedOrder.status) >= 3 ? styles.stepLabelActive : ''
-                    }`}>Done</span>
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '13.5px', color: '#475569' }}>
-                    Current Status: 
-                  </span>
-                  <span style={{ 
-                    marginLeft: '8px', 
-                    fontSize: '13.5px', 
-                    fontWeight: 700, 
-                    color: trackedOrder.status === 'completed' ? '#10b981' : trackedOrder.status === 'paid' ? '#3b82f6' : '#f59e0b',
-                    textTransform: 'uppercase'
-                  }}>
-                    {trackedOrder.status}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

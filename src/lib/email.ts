@@ -11,16 +11,21 @@ const SMTP_FROM = process.env.SMTP_FROM || '"Premium Hub" <noreply@premiumhub.co
 
 // Create transporter if SMTP configuration is present
 let transporter: nodemailer.Transporter | null = null;
-if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-  transporter = nodemailer.createTransport({
+if (SMTP_HOST) {
+  const mailConfig: any = {
     host: SMTP_HOST,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465, // true for port 465, false for other ports
-    auth: {
+  };
+  
+  if (SMTP_USER && SMTP_PASS) {
+    mailConfig.auth = {
       user: SMTP_USER,
       pass: SMTP_PASS,
-    },
-  });
+    };
+  }
+  
+  transporter = nodemailer.createTransport(mailConfig);
 }
 
 interface EmailOptions {

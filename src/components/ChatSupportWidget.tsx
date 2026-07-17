@@ -57,6 +57,7 @@ function playChime() {
 
 export default function ChatSupportWidget() {
   const pathname = usePathname();
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   // Widget visibility
   const [isOpen, setIsOpen] = useState(false);
@@ -84,6 +85,25 @@ export default function ChatSupportWidget() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const tokenRef = useRef<string | null>(null);
   const isOpenRef = useRef(false);
+
+  useEffect(() => {
+    async function fetchUser() {
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUser(data.user);
+          if (data.user && data.user.role === 'customer') {
+            setCustomerName(data.user.name);
+            setCustomerEmail(data.user.email);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching user for chat widget:', err);
+      }
+    }
+    fetchUser();
+  }, []);
 
   // Synchronize token and open status to avoid closures in intervals
   useEffect(() => {
@@ -307,7 +327,7 @@ export default function ChatSupportWidget() {
     setInitialMsg('');
   };
 
-  if (pathname?.startsWith('/dashboard')) {
+  if (pathname === '/login' || (currentUser && currentUser.role !== 'customer')) {
     return null;
   }
 
@@ -376,7 +396,7 @@ export default function ChatSupportWidget() {
             ) : status === 'waiting' ? (
               /* Waiting state: show queue number and animation spinner */
               <div className={styles.waitingScreen}>
-                <Loader2 className={styles.spinner} size={36} color="#8b5cf6" style={{ animation: 'spin 2s linear infinite' }} />
+                <Loader2 className={styles.spinner} size={36} color="#8b5cf6" />
                 <span className={styles.waitingTitle}>Connecting to Agent...</span>
                 <p className={styles.waitingDesc}>
                   {queuePosition > 0 

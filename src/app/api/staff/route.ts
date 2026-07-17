@@ -42,6 +42,10 @@ export async function GET(request: Request) {
         subscriptions: user.can_view_subscriptions,
         analytics: user.can_view_analytics,
         settings: user.can_view_settings,
+        orders: user.can_view_orders,
+        chat: user.can_view_chat,
+        payments: user.can_view_payments,
+        overview: user.can_view_overview,
       },
       created_at: user.created_at,
     }));
@@ -79,6 +83,10 @@ export async function POST(request: Request) {
     const subPerm = permissions?.subscriptions ? true : false;
     const anaPerm = permissions?.analytics ? true : false;
     const setPerm = permissions?.settings ? true : false;
+    const ordPerm = permissions?.orders !== undefined ? !!permissions.orders : true;
+    const chatPerm = permissions?.chat !== undefined ? !!permissions.chat : true;
+    const payPerm = permissions?.payments !== undefined ? !!permissions.payments : false;
+    const overPerm = permissions?.overview !== undefined ? !!permissions.overview : true;
 
     const newUser = await prisma.user.create({
       data: {
@@ -89,6 +97,10 @@ export async function POST(request: Request) {
         can_view_subscriptions: subPerm,
         can_view_analytics: anaPerm,
         can_view_settings: setPerm,
+        can_view_orders: ordPerm,
+        can_view_chat: chatPerm,
+        can_view_payments: payPerm,
+        can_view_overview: overPerm,
       },
     });
 
@@ -104,6 +116,10 @@ export async function POST(request: Request) {
           subscriptions: newUser.can_view_subscriptions,
           analytics: newUser.can_view_analytics,
           settings: newUser.can_view_settings,
+          orders: newUser.can_view_orders,
+          chat: newUser.can_view_chat,
+          payments: newUser.can_view_payments,
+          overview: newUser.can_view_overview,
         },
       },
     });
@@ -152,6 +168,10 @@ export async function PUT(request: Request) {
       can_view_subscriptions?: boolean;
       can_view_analytics?: boolean;
       can_view_settings?: boolean;
+      can_view_orders?: boolean;
+      can_view_chat?: boolean;
+      can_view_payments?: boolean;
+      can_view_overview?: boolean;
     }
 
     // Build update object
@@ -170,6 +190,18 @@ export async function PUT(request: Request) {
       }
       if (permissions.settings !== undefined) {
         updateData.can_view_settings = permissions.settings;
+      }
+      if (permissions.orders !== undefined) {
+        updateData.can_view_orders = permissions.orders;
+      }
+      if (permissions.chat !== undefined) {
+        updateData.can_view_chat = permissions.chat;
+      }
+      if (permissions.payments !== undefined) {
+        updateData.can_view_payments = permissions.payments;
+      }
+      if (permissions.overview !== undefined) {
+        updateData.can_view_overview = permissions.overview;
       }
     }
 

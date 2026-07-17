@@ -1,28 +1,67 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from '../page.module.css';
-import { BarChart2, Globe2, CreditCard, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import { BarChart2, Globe2, CreditCard, DollarSign, Calendar, TrendingUp, Loader2 } from 'lucide-react';
+
+interface MonthlyRevenueData {
+  month: string;
+  val: number;
+}
+
+interface SalesByCountryData {
+  country: string;
+  code: string;
+  sales: string;
+  percentage: number;
+}
 
 export default function AnalyticsPage() {
-  // Sales by Country (representing global currency setups)
-  const salesByCountry = [
-    { country: 'United States', code: 'US', currency: 'USD', sales: '$21,715.38', percentage: 45 },
-    { country: 'United Kingdom', code: 'GB', currency: 'GBP', sales: '$9,651.28', percentage: 20 },
-    { country: 'India', code: 'IN', currency: 'INR', sales: '$7,238.46', percentage: 15 },
-    { country: 'Japan', code: 'JP', currency: 'JPY', sales: '$5,790.77', percentage: 12 },
-    { country: 'Germany', code: 'DE', currency: 'EUR', sales: '$3,860.51', percentage: 8 },
-  ];
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalSales: '$0.00',
+    activeSubscriptions: 0,
+    assignedStaff: 0,
+    gatewayStatus: 'Active',
+    avgOrderValue: '$0.00',
+    conversionRate: '3.24%',
+    churnRate: '1.85%',
+  });
+  const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenueData[]>([]);
+  const [salesByCountry, setSalesByCountry] = useState<SalesByCountryData[]>([]);
 
-  // Monthly Revenue Chart Data (styled in CSS columns)
-  const monthlyRevenue = [
-    { month: 'Jan', val: 32 },
-    { month: 'Feb', val: 45 },
-    { month: 'Mar', val: 40 },
-    { month: 'Apr', val: 62 },
-    { month: 'May', val: 78 },
-    { month: 'Jun', val: 95 },
-  ];
+  useEffect(() => {
+    async function loadAnalytics() {
+      try {
+        const response = await fetch('/api/analytics');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setStats(data.stats);
+            setMonthlyRevenue(data.monthlyRevenue || []);
+            setSalesByCountry(data.salesByCountry || []);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching analytics page data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadAnalytics();
+  }, []);
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '16px' }}>
+        <Loader2 size={36} color="#8b5cf6" className={styles.spinner} />
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading statistics and reports...</span>
+      </div>
+    );
+  }
+
+  // Calculate dynamic max value for scaling the CSS bar heights properly
+  const maxRevenueVal = Math.max(...monthlyRevenue.map((item) => item.val), 1);
 
   return (
     <div className="animate-fade-in">
@@ -49,7 +88,7 @@ export default function AnalyticsPage() {
               <TrendingUp size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>3.24%</div>
+          <div className={styles.statValue}>{stats.conversionRate}</div>
           <div className={styles.statFooter}>
             <span className={styles.trendUp}>+0.8%</span>
             <span className={styles.trendMuted}>vs last month</span>
@@ -63,10 +102,9 @@ export default function AnalyticsPage() {
               <DollarSign size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>$82.40</div>
+          <div className={styles.statValue}>{stats.avgOrderValue}</div>
           <div className={styles.statFooter}>
-            <span className={styles.trendUp}>+4.2%</span>
-            <span className={styles.trendMuted}>AOV growth</span>
+            <span className={styles.trendUp}>AOV aggregate</span>
           </div>
         </div>
 
@@ -77,7 +115,7 @@ export default function AnalyticsPage() {
               <CreditCard size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>1.85%</div>
+          <div className={styles.statValue}>{stats.churnRate}</div>
           <div className={styles.statFooter}>
             <span className={styles.trendUp} style={{ color: 'var(--success)' }}>-0.3%</span>
             <span className={styles.trendMuted}>Churn reduction</span>
@@ -98,16 +136,19 @@ export default function AnalyticsPage() {
             <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: '1px', backgroundColor: 'var(--border-light)' }} />
             <div style={{ position: 'absolute', left: 0, right: 0, top: '80%', height: '1px', backgroundColor: 'var(--border-light)' }} />
 
-            {monthlyRevenue.map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', flexGrow: 1, zIndex: 2 }}>
-                <div style={{ position: 'relative', width: '32px', height: `${item.val * 1.5}px`, background: 'linear-gradient(to top, var(--accent-purple), var(--accent-blue))', borderRadius: '4px 4px 0 0', display: 'flex', justifyContent: 'center' }}>
-                  <span style={{ position: 'absolute', top: '-24px', fontSize: '11px', color: 'white', fontWeight: 600 }}>
-                    {item.val}%
-                  </span>
+            {monthlyRevenue.map((item, idx) => {
+              const heightPct = Math.max(8, (item.val / maxRevenueVal) * 100);
+              return (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', flexGrow: 1, zIndex: 2 }}>
+                  <div style={{ position: 'relative', width: '32px', height: `${heightPct * 1.5}px`, background: 'linear-gradient(to top, var(--accent-purple), var(--accent-blue))', borderRadius: '4px 4px 0 0', display: 'flex', justifyContent: 'center' }}>
+                    <span style={{ position: 'absolute', top: '-24px', fontSize: '11px', color: 'var(--text-primary)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      ${item.val}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.month}</span>
                 </div>
-                <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>{item.month}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -120,7 +161,7 @@ export default function AnalyticsPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600 }}>
                     <Globe2 size={16} style={{ color: 'var(--accent-purple)' }} />
-                    <span>{item.country} ({item.currency})</span>
+                    <span>{item.country}</span>
                   </div>
                   <span style={{ fontWeight: 700 }}>{item.sales}</span>
                 </div>

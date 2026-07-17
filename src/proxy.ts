@@ -23,7 +23,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // 2. Authenticated users trying to access login page -> Redirect to dashboard
-  if ((pathname === '/login' || pathname === '/') && isAuthenticated) {
+  if (pathname === '/login' && isAuthenticated) {
     const dashboardUrl = new URL('/dashboard', request.url);
     return NextResponse.redirect(dashboardUrl);
   }

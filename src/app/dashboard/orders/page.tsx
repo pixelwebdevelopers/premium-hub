@@ -15,6 +15,7 @@ import {
   ExternalLink,
   MessageSquare
 } from 'lucide-react';
+import { useDashboard } from '../layout';
 import styles from './orders.module.css';
 
 interface Order {
@@ -32,6 +33,7 @@ interface Order {
 }
 
 export default function AdminOrdersPage() {
+  const { user, isLoading: userLoading } = useDashboard();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export default function AdminOrdersPage() {
   // Load orders
   async function fetchOrders() {
     try {
+      setIsLoading(true);
       const response = await fetch('/api/orders');
       const data = await response.json();
       if (!response.ok) {
@@ -63,8 +66,31 @@ export default function AdminOrdersPage() {
   }
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (!userLoading && (user?.role === 'admin' || user?.permissions?.orders)) {
+      fetchOrders();
+    }
+  }, [user, userLoading]);
+
+  if (userLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '100px 0', gap: '12px' }}>
+        <Loader2 className={styles.spinner} size={36} color="#8b5cf6" />
+        <span style={{ color: '#64748b', fontSize: '14px' }}>Loading page data...</span>
+      </div>
+    );
+  }
+
+  if (user && user.role !== 'admin' && !user.permissions?.orders) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '120px 24px', gap: '16px' }}>
+        <AlertCircle size={48} color="#ef4444" />
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a' }}>Access Denied</h2>
+        <p style={{ color: '#64748b', fontSize: '14.5px', maxWidth: '360px', textAlign: 'center', lineHeight: '1.5' }}>
+          You do not have the required permissions to access the Orders Management area. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   // Update order status
   const handleUpdateStatus = async (orderId: number, newStatus: string) => {

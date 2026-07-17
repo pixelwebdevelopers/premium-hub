@@ -1,5 +1,5 @@
 .container {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   background-color: var(--bg-primary);
   color: var(--text-primary);
@@ -239,29 +239,42 @@
 .mainWrapper {
   flex-grow: 1;
   margin-left: 280px;
-  min-height: 100vh;
+  width: calc(100% - 280px);
+  max-width: calc(100% - 280px);
+  min-width: 0;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   transition: var(--transition-smooth);
+  overflow-x: hidden;
 }
 
 .mainWrapperSidebarCollapsed {
   margin-left: 80px;
+  width: calc(100% - 80px);
+  max-width: calc(100% - 80px);
 }
 
 /* Header bar on top */
 .headerBar {
   height: 80px;
-  background-color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
+  background-color: #ffffff;
   border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 40px;
-  position: sticky;
+  padding-left: 40px !important;
+  padding-right: 40px !important;
+  position: fixed;
   top: 0;
+  left: 280px;
+  right: 0;
   z-index: 50;
+  transition: left var(--transition-smooth);
+}
+
+.headerBarCollapsed {
+  left: 80px;
 }
 
 .pageTitle {
@@ -298,19 +311,31 @@
 
 /* Content view area */
 .contentView {
-  padding: 40px;
+  padding-top: 120px !important; /* 80px header height + 40px spacing */
+  padding-left: 40px !important;
+  padding-right: 40px !important;
+  padding-bottom: 40px !important;
   flex-grow: 1;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .contentViewChat {
-  padding: 0 !important;
+  padding-top: 80px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
 }
 
 /* Responsive Styles */
 @media (max-width: 1024px) {
   .sidebar {
     transform: translateX(-100%);
+    width: 280px !important;
+  }
+  
+  .sidebarCollapsed {
+    width: 280px !important;
   }
   
   .sidebarActive {
@@ -319,6 +344,8 @@
 
   .mainWrapper {
     margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   .mobileMenuBtn {
@@ -326,11 +353,16 @@
   }
 
   .headerBar {
-    padding: 0 24px;
+    left: 0 !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
   }
 
   .contentView {
-    padding: 24px;
+    padding-top: 104px !important; /* 80px header height + 24px spacing */
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+    padding-bottom: 24px !important;
   }
   
   /* Overlay when drawer is active */
@@ -397,7 +429,6 @@
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.1);
 }
 
-/* Collapse Button at the Bottom of Sidebar */
 .collapseBtnBottom {
   width: 100%;
   display: flex;
@@ -405,18 +436,16 @@
   gap: 12px;
   padding: 12px 14px;
   border-radius: var(--border-radius-sm);
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-light);
-  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  color: var(--sidebar-text-secondary);
   cursor: pointer;
   transition: var(--transition-smooth);
 }
 
 .collapseBtnBottom:hover {
   background: var(--sidebar-hover);
-  color: var(--text-primary);
-  border-color: var(--border-medium);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.15);
+  color: var(--sidebar-text-primary);
 }
 
 .collapseBtnBottomCollapsed {
@@ -449,4 +478,47 @@
     display: none;
   }
 }
+
+/* Chat notification indicators in main sidebar navigation */
+.pulseDot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  background-color: #ef4444;
+  border-radius: 50%;
+  border: 1px solid var(--sidebar-bg);
+  box-shadow: 0 0 6px #ef4444;
+  animation: pulseAnimation 1.5s infinite alternate;
+}
+
+@keyframes pulseAnimation {
+  0% {
+    transform: scale(0.9);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  100% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0);
+  }
+}
+
+.waitingBadge {
+  background-color: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1.5px 5.5px;
+  border-radius: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  box-shadow: 0 2px 5px rgba(239, 68, 68, 0.35);
+  margin-right: 8px;
+}
+
 

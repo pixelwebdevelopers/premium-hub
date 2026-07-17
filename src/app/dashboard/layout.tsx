@@ -26,6 +26,10 @@ interface UserPermissions {
   subscriptions: boolean;
   analytics: boolean;
   settings: boolean;
+  orders?: boolean;
+  chat?: boolean;
+  payments?: boolean;
+  overview?: boolean;
 }
 
 interface UserProfile {
@@ -58,6 +62,29 @@ export default function DashboardLayout({
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [waitingCount, setWaitingCount] = useState(0);
+
+  // Poll waiting chat queue for notifications badge (Staff only)
+  useEffect(() => {
+    if (!user || user.role === 'customer') return;
+
+    const checkWaitingQueue = async () => {
+      try {
+        const res = await fetch('/api/chat/staff/poll');
+        if (res.ok) {
+          const data = await res.json();
+          const waiting = data.waiting_sessions || [];
+          setWaitingCount(waiting.length);
+        }
+      } catch (err) {
+        console.error('Error checking waiting queue count:', err);
+      }
+    };
+
+    checkWaitingQueue();
+    const interval = setInterval(checkWaitingQueue, 5000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Fetch logged-in user profile on load
   useEffect(() => {
@@ -117,11 +144,27 @@ export default function DashboardLayout({
     ? [
         { href: '/dashboard', label: 'My Subscriptions', icon: CreditCard, show: true },
         { href: '/', label: 'Place New Order', icon: ShoppingBag, show: true },
+        { href: '/dashboard/profile', label: 'Profile Settings', icon: Settings, show: true },
       ]
     : [
-        { href: '/dashboard', label: 'Overview', icon: Home, show: true },
-        { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag, show: true },
-        { href: '/dashboard/chat', label: 'Support Chat', icon: MessageSquare, show: true },
+        {
+          href: '/dashboard',
+          label: 'Overview',
+          icon: Home,
+          show: user.role === 'admin' || user.permissions?.overview,
+        },
+        {
+          href: '/dashboard/orders',
+          label: 'Orders',
+          icon: ShoppingBag,
+          show: user.role === 'admin' || user.permissions?.orders,
+        },
+        {
+          href: '/dashboard/chat',
+          label: 'Support Chat',
+          icon: MessageSquare,
+          show: user.role === 'admin' || user.permissions?.chat,
+        },
         { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },
         {
           href: '/dashboard/subscriptions',
@@ -133,7 +176,7 @@ export default function DashboardLayout({
           href: '/dashboard/payments',
           label: 'Payments',
           icon: Wallet,
-          show: user.role === 'admin' || user.permissions?.settings,
+          show: user.role === 'admin' || user.permissions?.payments,
         },
         {
           href: '/dashboard/analytics',
@@ -175,7 +218,7 @@ export default function DashboardLayout({
             {isCollapsed ? (
               <div className={styles.faviconContainer}>
                 <Image
-                  src="/favicon-v3.png"
+                  src="/favicon-v4.png"
                   alt="Premium Hub Favicon"
                   width={32}
                   height={32}
@@ -185,7 +228,7 @@ export default function DashboardLayout({
             ) : (
               <div className={styles.logoContainer}>
                 <Image
-                  src="/premium-hub-logo-v3.png"
+                  src="/premium-hub-logo-v4.png"
                   alt="Premium Hub Logo"
                   width={190}
                   height={56}
@@ -203,6 +246,7 @@ export default function DashboardLayout({
               .map((item) => {
                 const isActive = pathname === item.href;
                 const Icon = item.icon;
+                const isChatLink = item.label === 'Support Chat';
                 return (
                   <Link
                     key={item.href}
@@ -212,11 +256,20 @@ export default function DashboardLayout({
                     }`}
                     onClick={() => setIsMobileOpen(false)}
                   >
-                    <Icon className={styles.navLinkIcon} size={18} />
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <Icon className={styles.navLinkIcon} size={18} />
+                      {isChatLink && waitingCount > 0 && (
+                        <span className={styles.pulseDot} />
+                      )}
+                    </div>
                     <span
                       className={`${styles.navLinkLabel} ${isCollapsed ? styles.navLinkLabelHidden : ''}`}
+                      style={isCollapsed ? { display: 'none' } : { display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}
                     >
-                      {item.label}
+                      <span>{item.label}</span>
+                      {isChatLink && waitingCount > 0 && !isCollapsed && (
+                        <span className={styles.waitingBadge}>{waitingCount}</span>
+                      )}
                     </span>
                   </Link>
                 );
@@ -239,7 +292,7 @@ export default function DashboardLayout({
         {/* Main Content Area */}
         <div className={mainWrapperClass}>
           {/* Dashboard Header Bar */}
-          <header className={styles.headerBar}>
+          <header className={`${styles.headerBar} ${isCollapsed ? styles.headerBarCollapsed : ''}`}>
             <h2 className={styles.pageTitle}>{pageTitle}</h2>
             
             <div className={styles.headerActions}>

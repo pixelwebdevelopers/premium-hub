@@ -25,6 +25,10 @@ export async function GET(request: Request) {
       can_view_subscriptions: boolean;
       can_view_analytics: boolean;
       can_view_settings: boolean;
+      can_view_orders: boolean;
+      can_view_chat: boolean;
+      can_view_payments: boolean;
+      can_view_overview: boolean;
     }
     const decoded = (await verifyJWT(token, JWT_SECRET)) as JWTSessionPayload | null;
     if (!decoded) {
@@ -53,19 +57,31 @@ export async function GET(request: Request) {
       subscriptions: user.can_view_subscriptions,
       analytics: user.can_view_analytics,
       settings: user.can_view_settings,
+      orders: user.can_view_orders,
+      chat: user.can_view_chat,
+      payments: user.can_view_payments,
+      overview: user.can_view_overview,
     };
 
     // Check if the JWT permissions are outdated
     const jwtPermissions = {
-      subscriptions: decoded.can_view_subscriptions,
-      analytics: decoded.can_view_analytics,
-      settings: decoded.can_view_settings,
+      subscriptions: decoded.can_view_subscriptions !== undefined ? decoded.can_view_subscriptions : true,
+      analytics: decoded.can_view_analytics !== undefined ? decoded.can_view_analytics : false,
+      settings: decoded.can_view_settings !== undefined ? decoded.can_view_settings : false,
+      orders: decoded.can_view_orders !== undefined ? decoded.can_view_orders : true,
+      chat: decoded.can_view_chat !== undefined ? decoded.can_view_chat : true,
+      payments: decoded.can_view_payments !== undefined ? decoded.can_view_payments : false,
+      overview: decoded.can_view_overview !== undefined ? decoded.can_view_overview : true,
     };
 
     const isOutdated =
       jwtPermissions.subscriptions !== dbPermissions.subscriptions ||
       jwtPermissions.analytics !== dbPermissions.analytics ||
       jwtPermissions.settings !== dbPermissions.settings ||
+      jwtPermissions.orders !== dbPermissions.orders ||
+      jwtPermissions.chat !== dbPermissions.chat ||
+      jwtPermissions.payments !== dbPermissions.payments ||
+      jwtPermissions.overview !== dbPermissions.overview ||
       decoded.name !== user.name ||
       decoded.email !== user.email;
 
@@ -89,6 +105,10 @@ export async function GET(request: Request) {
         can_view_subscriptions: dbPermissions.subscriptions,
         can_view_analytics: dbPermissions.analytics,
         can_view_settings: dbPermissions.settings,
+        can_view_orders: dbPermissions.orders,
+        can_view_chat: dbPermissions.chat,
+        can_view_payments: dbPermissions.payments,
+        can_view_overview: dbPermissions.overview,
       };
       const newToken = await signJWT(newPayload, JWT_SECRET);
       response.cookies.set('auth-token', newToken, {

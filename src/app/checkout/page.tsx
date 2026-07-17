@@ -545,7 +545,7 @@ function CheckoutForm() {
       <div className={styles.container}>
         <header className={styles.header}>
           <div className={styles.logoWrapper} onClick={() => router.push('/')}>
-            <Image src="/premium-hub-logo-v3.png" alt="Premium Hub Logo" width={180} height={50} style={{ objectFit: 'contain' }} priority />
+            <Image src="/premium-hub-logo-v4.png" alt="Premium Hub Logo" width={180} height={50} style={{ objectFit: 'contain' }} priority />
           </div>
         </header>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '16px' }}>
@@ -561,7 +561,7 @@ function CheckoutForm() {
       <div className={styles.container}>
         <header className={styles.header}>
           <div className={styles.logoWrapper} onClick={() => router.push('/')}>
-            <Image src="/premium-hub-logo-v3.png" alt="Premium Hub Logo" width={180} height={50} style={{ objectFit: 'contain' }} priority />
+            <Image src="/premium-hub-logo-v4.png" alt="Premium Hub Logo" width={180} height={50} style={{ objectFit: 'contain' }} priority />
           </div>
         </header>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '16px' }}>
@@ -583,7 +583,7 @@ function CheckoutForm() {
       <header className={styles.header}>
         <div className={styles.logoWrapper} onClick={() => router.push('/')}>
           <Image
-            src="/premium-hub-logo-v3.png"
+            src="/premium-hub-logo-v4.png"
             alt="Premium Hub Logo"
             width={180}
             height={50}

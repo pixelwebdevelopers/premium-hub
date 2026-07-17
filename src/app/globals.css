@@ -108,6 +108,7 @@ a {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-light);
   box-shadow: var(--shadow-premium);
+  transition: var(--transition-smooth);
 }
 
 /* Keyframes for animations */
@@ -134,3 +135,6 @@ a {
 .animate-fade-in {
   animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+
+

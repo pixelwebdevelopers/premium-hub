@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, LogOut, CheckCircle2, MessageSquare, ShieldAlert, Loader2 } from 'lucide-react';
+import { Send, MessageSquare, ShieldAlert, Loader2, User, Phone, FileText, ExternalLink, AlertCircle } from 'lucide-react';
+import { useDashboard } from '../layout';
 import styles from './chat.module.css';
 
 interface Message {
@@ -32,27 +33,46 @@ interface StaffAgent {
   role: string;
 }
 
-// Client-side Web Audio API notification chime
+interface ChatOrder {
+  id: number;
+  tracking_id: string;
+  customer_name: string;
+  customer_email: string;
+  whatsapp_number: string;
+  screenshot_url: string;
+  status: string;
+  subscription_name: string;
+  price: number;
+  currency: string;
+  created_at: string;
+  updated_at: string;
+}
+
+const CANNED_RESPONSES = [
+  { label: 'Standard Greeting', text: 'Hello! Thank you for contacting Premium Hub support. How can I help you today?' },
+  { label: 'Request Receipt', text: 'To verify your order, please upload or send a screenshot of your payment receipt.' },
+  { label: 'Credentials Handover', text: 'Your premium account credentials have been configured. Please check your registered email or let me know if you need help.' },
+  { label: 'Close Ticket', text: 'I am marking this support session as resolved. Let us know if you need anything else. Thank you for choosing Premium Hub!' },
+];
+
 function playChime() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextClass) return;
     const ctx = new AudioContextClass();
     
-    // First soft note
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+    osc.frequency.setValueAtTime(587.33, ctx.currentTime);
     gain.gain.setValueAtTime(0.12, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.35);
     
-    // Second note delayed by 110ms
     setTimeout(() => {
       try {
         const osc2 = ctx.createOscillator();
@@ -60,12 +80,12 @@ function playChime() {
         osc2.connect(gain2);
         gain2.connect(ctx.destination);
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(880, ctx.currentTime); // A5
+        osc2.frequency.setValueAtTime(880, ctx.currentTime);
         gain2.gain.setValueAtTime(0.12, ctx.currentTime);
         gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
         osc2.start(ctx.currentTime);
         osc2.stop(ctx.currentTime + 0.35);
-      } catch (e) {}
+      } catch {}
     }, 110);
   } catch (error) {
     console.warn('Audio chime failed:', error);
@@ -73,13 +93,12 @@ function playChime() {
 }
 
 export default function StaffChatPage() {
-  // Chat list state
+  const { user: currentUser, isLoading: userLoading } = useDashboard();
   const [waitingQueue, setWaitingQueue] = useState<ChatSession[]>([]);
   const [activeChats, setActiveChats] = useState<ChatSession[]>([]);
   const [onlineAgents, setOnlineAgents] = useState<StaffAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Selected chat state
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
   const [selectedChat, setSelectedChat] = useState<ChatSession | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -87,18 +106,19 @@ export default function StaffChatPage() {
   const [isSubmittingMsg, setIsSubmittingMsg] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
-  // Refs for tracking queue states and scrolling
+  // Customer Management Right Panel States
+  const [customerOrders, setCustomerOrders] = useState<ChatOrder[]>([]);
+  const [isUpdatingOrder, setIsUpdatingOrder] = useState<number | null>(null);
+
   const prevWaitingLengthRef = useRef(0);
   const lastMessageIdRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const selectedChatIdRef = useRef<number | null>(null);
 
-  // Sync ref to avoid closures in event timers
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId;
   }, [selectedChatId]);
 
-  // 1. Scroll message container to bottom
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -109,8 +129,18 @@ export default function StaffChatPage() {
     }
   }, [messages]);
 
-  // 2. Poll queues & online agents (every 2 seconds)
+  // Handler to clear states when chat selection changes
+  const handleSelectChat = (id: number | null) => {
+    setSelectedChatId(id);
+    setMessages([]);
+    setSelectedChat(null);
+    setCustomerOrders([]);
+    lastMessageIdRef.current = 0;
+  };
+
+  // 1. Poll Queues & Staff
   useEffect(() => {
+    if (userLoading || (currentUser?.role !== 'admin' && !currentUser?.permissions?.chat)) return;
     const fetchQueues = async () => {
       try {
         const response = await fetch('/api/chat/staff/poll');
@@ -121,7 +151,6 @@ export default function StaffChatPage() {
         setActiveChats(data.my_active_sessions || []);
         setOnlineAgents(data.online_staff || []);
 
-        // Audio notification when waiting queue grows
         const currentWaitingCount = (data.waiting_sessions || []).length;
         if (currentWaitingCount > prevWaitingLengthRef.current) {
           playChime();
@@ -134,19 +163,14 @@ export default function StaffChatPage() {
       }
     };
 
-    fetchQueues(); // Immediate fetch on mount
+    fetchQueues();
     const interval = setInterval(fetchQueues, 2000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser, userLoading]);
 
-  // 3. Poll messages for the currently selected active conversation (every 2 seconds)
+  // 2. Poll Messages for Active Chat
   useEffect(() => {
-    if (!selectedChatId) {
-      setMessages([]);
-      setSelectedChat(null);
-      lastMessageIdRef.current = 0;
-      return;
-    }
+    if (!selectedChatId) return;
 
     const fetchMessages = async (isInitial = false) => {
       if (selectedChatIdRef.current !== selectedChatId) return;
@@ -162,7 +186,6 @@ export default function StaffChatPage() {
         setSelectedChat(data.session);
 
         if (data.messages && data.messages.length > 0) {
-          // Play alert tone if a new message from customer is received (and it's not the initial load)
           if (!isInitial) {
             const hasNewCustomerMsg = data.messages.some(
               (m: Message) => m.sender_type === 'customer'
@@ -172,14 +195,12 @@ export default function StaffChatPage() {
             }
           }
 
-          // Update messages state
           if (isInitial) {
             setMessages(data.messages);
           } else {
             setMessages((prev) => [...prev, ...data.messages]);
           }
 
-          // Update largest message id
           const maxId = Math.max(...data.messages.map((m: Message) => m.id));
           lastMessageIdRef.current = maxId;
         }
@@ -188,12 +209,45 @@ export default function StaffChatPage() {
       }
     };
 
-    fetchMessages(true); // Load message history
+    fetchMessages(true);
     const interval = setInterval(() => fetchMessages(false), 2000);
     return () => clearInterval(interval);
   }, [selectedChatId]);
 
-  // 4. Handle Claiming a waiting chat session
+  // 3. Load Customer Orders history
+  const fetchCustomerOrders = async (email: string) => {
+    try {
+      const res = await fetch('/api/orders');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.orders) {
+          const filtered = data.orders.filter(
+            (o: ChatOrder) => o.customer_email.toLowerCase() === email.toLowerCase()
+          );
+          setCustomerOrders(filtered);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching customer orders in chat:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedChatId) return;
+    const currentChat =
+      activeChats.find((c) => c.id === selectedChatId) ||
+      waitingQueue.find((c) => c.id === selectedChatId);
+
+    if (currentChat && currentChat.customer_email) {
+      fetchCustomerOrders(currentChat.customer_email);
+    }
+  }, [selectedChatId, activeChats, waitingQueue]);
+
+  const handleApplyCanned = (text: string) => {
+    setInputText(text);
+  };
+
+  // 4. Claim Chat
   const handleClaimChat = async (id: number) => {
     setIsClaiming(true);
     try {
@@ -208,9 +262,7 @@ export default function StaffChatPage() {
         alert(data.error || 'Failed to claim chat session.');
         return;
       }
-
-      // Automatically select the claimed chat
-      setSelectedChatId(id);
+      handleSelectChat(id);
     } catch (error) {
       console.error('Claim chat error:', error);
       alert('Network error claiming chat.');
@@ -219,7 +271,7 @@ export default function StaffChatPage() {
     }
   };
 
-  // 5. Handle closing/finishing a chat session
+  // 5. Close Chat
   const handleCloseChat = async () => {
     if (!selectedChatId) return;
     if (!confirm('Are you sure you want to close this chat session?')) return;
@@ -233,16 +285,14 @@ export default function StaffChatPage() {
       if (!response.ok) {
         throw new Error('Failed to close session.');
       }
-      setSelectedChatId(null);
-      setSelectedChat(null);
-      setMessages([]);
+      handleSelectChat(null);
     } catch (error) {
       console.error('Close chat error:', error);
       alert('Failed to close chat session.');
     }
   };
 
-  // 6. Handle sending replies
+  // 6. Send Message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !selectedChatId || isSubmittingMsg) return;
@@ -266,7 +316,6 @@ export default function StaffChatPage() {
         throw new Error('Failed to send message.');
       }
 
-      // Query new messages instantly after sending
       const pollUrl = `/api/chat/staff/messages?session_id=${selectedChatId}&last_message_id=${lastMessageIdRef.current}`;
       const pollResp = await fetch(pollUrl);
       if (pollResp.ok) {
@@ -285,15 +334,73 @@ export default function StaffChatPage() {
     }
   };
 
+  // 7. Inline Order processing
+  const handleUpdateOrderStatus = async (orderId: number, newStatus: string) => {
+    setIsUpdatingOrder(orderId);
+    try {
+      const response = await fetch('/api/orders/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId, status: newStatus }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        const currentChat =
+          activeChats.find((c) => c.id === selectedChatId) ||
+          waitingQueue.find((c) => c.id === selectedChatId);
+        if (currentChat && currentChat.customer_email) {
+          fetchCustomerOrders(currentChat.customer_email);
+        }
+      } else {
+        alert(data.error || 'Failed to update order status.');
+      }
+    } catch (err) {
+      console.error('Error processing order status from chat:', err);
+      alert('Error updating order.');
+    } finally {
+      setIsUpdatingOrder(null);
+    }
+  };
+
   const currentActiveChat = activeChats.find((c) => c.id === selectedChatId);
   const currentWaitingChat = waitingQueue.find((c) => c.id === selectedChatId);
+  const activeSession = currentActiveChat || currentWaitingChat;
+
+  const getWhatsAppLink = (num: string) => {
+    const cleanNum = num.replace(/[^0-9]/g, '');
+    return `https://wa.me/${cleanNum}`;
+  };
+
+  // Find whatsapp number if available in history
+  const customerWhatsapp = customerOrders.find((o) => o.whatsapp_number)?.whatsapp_number;
+
+  if (userLoading) {
+    return (
+      <div className={styles.emptyState}>
+        <Loader2 className={styles.spinner} size={28} color="#8b5cf6" />
+        <span>Loading Live Support console...</span>
+      </div>
+    );
+  }
+
+  if (currentUser && currentUser.role !== 'admin' && !currentUser.permissions?.chat) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '120px 24px', gap: '16px', background: '#ffffff', height: 'calc(100vh - 80px)' }}>
+        <AlertCircle size={48} color="#ef4444" />
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a' }}>Access Denied</h2>
+        <p style={{ color: '#64748b', fontSize: '14.5px', maxWidth: '360px', textAlign: 'center', lineHeight: '1.5' }}>
+          You do not have the required permissions to access the Support Chat console. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>
       <div className={styles.splitView}>
         {/* Sidebar */}
         <aside className={styles.sidebar}>
-          {/* Active Chats list */}
+          {/* Active Chats */}
           <div className={styles.sidebarSection}>
             <div className={styles.sectionHeader}>
               <span>My Active Chats</span>
@@ -301,7 +408,7 @@ export default function StaffChatPage() {
             </div>
             <div className={styles.list}>
               {activeChats.length === 0 ? (
-                <div style={{ fontSize: '12.5px', color: '#71717a', fontStyle: 'italic', padding: '4px 0' }}>
+                <div style={{ fontSize: '12px', color: '#71717a', fontStyle: 'italic', padding: '4px 0' }}>
                   No active chats assigned
                 </div>
               ) : (
@@ -311,7 +418,7 @@ export default function StaffChatPage() {
                     className={`${styles.sessionItem} ${
                       selectedChatId === chat.id ? styles.sessionItemActive : ''
                     }`}
-                    onClick={() => setSelectedChatId(chat.id)}
+                    onClick={() => handleSelectChat(chat.id)}
                   >
                     <div className={styles.sessionName}>
                       <span>{chat.customer_name}</span>
@@ -325,7 +432,7 @@ export default function StaffChatPage() {
             </div>
           </div>
 
-          {/* Waiting Queue list */}
+          {/* Waiting Queue */}
           <div className={styles.sidebarSection}>
             <div className={styles.sectionHeader}>
               <span>Waiting Queue</span>
@@ -335,7 +442,7 @@ export default function StaffChatPage() {
             </div>
             <div className={styles.list}>
               {waitingQueue.length === 0 ? (
-                <div style={{ fontSize: '12.5px', color: '#71717a', fontStyle: 'italic', padding: '4px 0' }}>
+                <div style={{ fontSize: '12px', color: '#71717a', fontStyle: 'italic', padding: '4px 0' }}>
                   Queue is currently empty
                 </div>
               ) : (
@@ -347,11 +454,11 @@ export default function StaffChatPage() {
                       className={`${styles.sessionItem} ${
                         selectedChatId === chat.id ? styles.sessionItemActive : ''
                       }`}
-                      onClick={() => setSelectedChatId(chat.id)}
+                      onClick={() => handleSelectChat(chat.id)}
                     >
                       <div className={styles.sessionName}>
                         <span>{chat.customer_name}</span>
-                        <span style={{ fontSize: '10.5px', color: '#ef4444', fontWeight: 700 }}>WAITING</span>
+                        <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 700 }}>WAITING</span>
                       </div>
                       <div className={styles.sessionMeta} title={initialMsg}>
                         {initialMsg}
@@ -363,7 +470,7 @@ export default function StaffChatPage() {
             </div>
           </div>
 
-          {/* Online Agents List */}
+          {/* Online Staff */}
           <div className={styles.sidebarSection} style={{ borderBottom: 'none' }}>
             <div className={styles.sectionHeader}>
               <span>Online Agents</span>
@@ -390,14 +497,13 @@ export default function StaffChatPage() {
             </div>
           ) : !selectedChatId ? (
             <div className={styles.emptyState}>
-              <MessageSquare size={48} color="#27272a" />
+              <MessageSquare size={48} color="#a1a1aa" />
               <span style={{ fontWeight: 600 }}>Support Chat Console</span>
-              <span style={{ fontSize: '13px', color: '#52525b', maxWidth: '320px', textAlign: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#71717a', maxWidth: '320px', textAlign: 'center' }}>
                 Select a waiting user to claim their ticket, or open an assigned active chat session.
               </span>
             </div>
           ) : currentWaitingChat ? (
-            /* Waiting state screen (needs to be claimed) */
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               <div className={styles.chatHeader}>
                 <div className={styles.chatTitleInfo}>
@@ -426,9 +532,8 @@ export default function StaffChatPage() {
               </div>
             </div>
           ) : selectedChat ? (
-            /* Active state screen (conversation view) */
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              {/* Active Header */}
+              {/* Header */}
               <div className={styles.chatHeader}>
                 <div className={styles.chatTitleInfo}>
                   <span className={styles.chatCustomerName}>{selectedChat.customer_name}</span>
@@ -444,7 +549,7 @@ export default function StaffChatPage() {
                 )}
               </div>
 
-              {/* Message scroll container */}
+              {/* Chat messages */}
               <div className={styles.messagesScroll}>
                 {messages.map((msg) => {
                   let rowClass = styles.rowCustomer;
@@ -472,7 +577,7 @@ export default function StaffChatPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Message Input strip */}
+              {/* Input strip */}
               {selectedChat.status === 'active' ? (
                 <form onSubmit={handleSendMessage} className={styles.inputBar}>
                   <input
@@ -496,8 +601,8 @@ export default function StaffChatPage() {
                   style={{
                     padding: '16px',
                     textAlign: 'center',
-                    background: 'rgba(255, 255, 255, 0.01)',
-                    borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+                    background: '#f9fafb',
+                    borderTop: '1px solid #e5e7eb',
                     color: '#71717a',
                     fontSize: '13px',
                     fontStyle: 'italic',
@@ -514,6 +619,148 @@ export default function StaffChatPage() {
             </div>
           )}
         </main>
+
+        {/* Right Panel: Customer Profile & Order Management (Staff View) */}
+        {activeSession && activeSession.customer_email && (
+          <aside className={styles.rightPanel}>
+            {/* Customer Details */}
+            <div className={styles.rightPanelSection}>
+              <div className={styles.panelTitle}>
+                <User size={14} />
+                <span>Customer Profile</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#111827' }}>
+                    {activeSession.customer_name}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {activeSession.customer_email}
+                  </div>
+                </div>
+                {customerWhatsapp && (
+                  <div style={{ marginTop: '8px' }}>
+                    <a
+                      href={getWhatsAppLink(customerWhatsapp)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        color: '#10b981',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Phone size={13} />
+                      <span>WhatsApp Customer</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Canned Responses */}
+            <div className={styles.rightPanelSection}>
+              <div className={styles.panelTitle}>
+                <MessageSquare size={14} />
+                <span>Quick Canned Replies</span>
+              </div>
+              <div className={styles.cannedGrid}>
+                {CANNED_RESPONSES.map((resp, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleApplyCanned(resp.text)}
+                    className={styles.cannedBtn}
+                    title={resp.text}
+                  >
+                    <div style={{ fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '2px' }}>
+                      {resp.label}
+                    </div>
+                    <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                      {resp.text}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Active Subscriptions/Orders history */}
+            <div className={styles.rightPanelSection} style={{ flex: 1 }}>
+              <div className={styles.panelTitle}>
+                <FileText size={14} />
+                <span>Customer Orders ({customerOrders.length})</span>
+              </div>
+              <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 400px)' }}>
+                {customerOrders.length === 0 ? (
+                  <div style={{ fontSize: '12.5px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
+                    No orders on record.
+                  </div>
+                ) : (
+                  customerOrders.map((ord) => (
+                    <div key={ord.id} className={styles.orderCard}>
+                      <div className={styles.orderCardHeader}>
+                        <span className={styles.orderCardId}>{ord.tracking_id}</span>
+                        <span className={styles.orderCardPrice}>
+                          {Number(ord.price).toFixed(2)} {ord.currency}
+                        </span>
+                      </div>
+                      <div className={styles.orderCardService}>{ord.subscription_name}</div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#6b7280' }}>
+                        <span>Status:</span>
+                        <span style={{
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          color: ord.status === 'completed' ? '#10b981' : ord.status === 'paid' ? '#3b82f6' : '#f59e0b'
+                        }}>
+                          {ord.status}
+                        </span>
+                      </div>
+
+                      {/* Process Order Actions inline */}
+                      <div className={styles.orderCardActions}>
+                        {ord.status === 'unpaid' && (
+                          <button
+                            type="button"
+                            className={`${styles.orderActionBtn} ${styles.orderActionBtnPrimary}`}
+                            onClick={() => handleUpdateOrderStatus(ord.id, 'paid')}
+                            disabled={isUpdatingOrder === ord.id}
+                          >
+                            {isUpdatingOrder === ord.id ? '...' : 'Mark Paid'}
+                          </button>
+                        )}
+                        {ord.status === 'paid' && (
+                          <button
+                            type="button"
+                            className={`${styles.orderActionBtn} ${styles.orderActionBtnPrimary}`}
+                            onClick={() => handleUpdateOrderStatus(ord.id, 'completed')}
+                            disabled={isUpdatingOrder === ord.id}
+                          >
+                            {isUpdatingOrder === ord.id ? '...' : 'Complete'}
+                          </button>
+                        )}
+                        {ord.status === 'completed' && (
+                          <button
+                            type="button"
+                            className={styles.orderActionBtn}
+                            onClick={() => handleUpdateOrderStatus(ord.id, 'unpaid')}
+                            disabled={isUpdatingOrder === ord.id}
+                          >
+                            {isUpdatingOrder === ord.id ? '...' : 'Reset Unpaid'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );

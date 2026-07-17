@@ -1,11 +1,30 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styles from '../page.module.css';
-import { Settings, Database, ShieldAlert, CheckCircle2, Globe2, Save } from 'lucide-react';
+import { Settings, Database, ShieldAlert, CheckCircle2, Globe2, Save, Loader2, AlertCircle } from 'lucide-react';
+
+interface DbStatus {
+  host: string;
+  user: string;
+  database: string;
+  port: number;
+  status: string;
+}
+
+interface ActiveCurrencies {
+  usd: boolean;
+  eur: boolean;
+  gbp: boolean;
+  inr: boolean;
+  jpy: boolean;
+  cad: boolean;
+  aud: boolean;
+}
 
 export default function SettingsPage() {
-  const [dbStatus] = useState({
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbStatus, setDbStatus] = useState<DbStatus>({
     host: 'localhost',
     user: 'root',
     database: 'premium_hub',
@@ -13,7 +32,7 @@ export default function SettingsPage() {
     status: 'Connected',
   });
 
-  const [activeCurrencies, setActiveCurrencies] = useState({
+  const [activeCurrencies, setActiveCurrencies] = useState<ActiveCurrencies>({
     usd: true,
     eur: true,
     gbp: true,
@@ -23,19 +42,89 @@ export default function SettingsPage() {
     aud: false,
   });
 
-  const handleCurrencyToggle = (key: keyof typeof activeCurrencies) => {
-    setActiveCurrencies({
-      ...activeCurrencies,
-      [key]: !activeCurrencies[key],
-    });
+  const [isSaving, setIsSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Fetch settings configurations on mount
+  useEffect(() => {
+    async function loadSettings() {
+      try {
+        const response = await fetch('/api/settings');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setDbStatus(data.dbStatus);
+            setActiveCurrencies(data.currencies);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching settings configs:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadSettings();
+  }, []);
+
+  const handleCurrencyToggle = (key: keyof ActiveCurrencies) => {
+    setActiveCurrencies((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
   };
 
-  const handleSaveSettings = () => {
-    alert('Settings configuration saved successfully!');
+  const handleSaveSettings = async () => {
+    setIsSaving(true);
+    setFeedback(null);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currencies: activeCurrencies }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setFeedback({ text: 'Settings configurations saved successfully!', type: 'success' });
+      } else {
+        throw new Error(data.error || 'Failed to save settings.');
+      }
+    } catch (err: any) {
+      setFeedback({ text: err.message || 'Error saving settings.', type: 'error' });
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '16px' }}>
+        <Loader2 size={36} color="#8b5cf6" className={styles.spinner} />
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading configurations...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
+      {/* Feedback Banner */}
+      {feedback && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px', 
+          color: feedback.type === 'success' ? '#10b981' : '#f87171', 
+          background: feedback.type === 'success' ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)', 
+          border: `1px solid ${feedback.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, 
+          borderRadius: '12px', 
+          padding: '12px 16px', 
+          marginBottom: '24px', 
+          fontSize: '13.5px' 
+        }}>
+          {feedback.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+          <span>{feedback.text}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
         <div>
@@ -57,11 +146,14 @@ export default function SettingsPage() {
             fontWeight: 600,
             fontSize: '14px',
             cursor: 'pointer',
+            opacity: isSaving ? 0.7 : 1,
+            pointerEvents: isSaving ? 'none' : 'auto',
+            transition: 'all 0.2s',
           }}
           onClick={handleSaveSettings}
         >
-          <Save size={18} />
-          <span>Save Settings</span>
+          {isSaving ? <Loader2 size={18} className={styles.spinner} /> : <Save size={18} />}
+          <span>{isSaving ? 'Saving...' : 'Save Settings'}</span>
         </button>
       </div>
 
@@ -101,7 +193,7 @@ export default function SettingsPage() {
                       <input
                         type="checkbox"
                         checked={isChecked}
-                        onChange={() => handleCurrencyToggle(key as keyof typeof activeCurrencies)}
+                        onChange={() => handleCurrencyToggle(key as keyof ActiveCurrencies)}
                       />
                       <span className={styles.slider} />
                     </label>
@@ -141,7 +233,7 @@ export default function SettingsPage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13.5px' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Connection Pool Status</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--success)', fontWeight: 600 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: dbStatus.status === 'Connected' ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
                   <CheckCircle2 size={16} />
                   {dbStatus.status}
                 </span>

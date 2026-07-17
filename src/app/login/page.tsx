@@ -328,7 +328,7 @@ export default function LoginPage() {
         <div className={styles.header}>
           <div className={styles.logoWrapper} style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
             <Image
-              src="/premium-hub-logo-v3.png"
+              src="/premium-hub-logo-v4.png"
               alt="Premium Hub Logo"
               width={200}
               height={60}

@@ -83,7 +83,7 @@ export default function PaymentsPage() {
   };
 
   useEffect(() => {
-    if (currentUser?.role === 'admin' || currentUser?.permissions?.settings) {
+    if (currentUser?.role === 'admin' || currentUser?.permissions?.payments) {
       fetchPaymentMethods();
     }
   }, [currentUser]);
@@ -275,13 +275,13 @@ export default function PaymentsPage() {
     method.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (currentUser?.role !== 'admin' && !currentUser?.permissions?.settings) {
+  if (currentUser?.role !== 'admin' && !currentUser?.permissions?.payments) {
     return (
       <div className={styles.emptyState}>
         <AlertTriangle size={48} style={{ color: 'var(--danger)' }} />
         <h3 className={styles.emptyTitle}>Access Denied</h3>
         <p className={styles.emptyDesc}>
-          Only system administrators or staff members with settings access can configure payments.
+          Only system administrators or staff members with payments access can configure payments.
         </p>
       </div>
     );

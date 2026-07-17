@@ -9,6 +9,10 @@ interface StaffPermissions {
   subscriptions: boolean;
   analytics: boolean;
   settings: boolean;
+  orders: boolean;
+  chat: boolean;
+  payments: boolean;
+  overview: boolean;
 }
 
 interface StaffMember {
@@ -123,9 +127,13 @@ export default function StaffPage() {
           email: newEmail,
           password: newPassword,
           permissions: {
-            subscriptions: true, // Default to true as they need to manage subscription sellings
+            subscriptions: true,
             analytics: false,
             settings: false,
+            orders: true,
+            chat: true,
+            payments: false,
+            overview: true,
           },
         }),
       });
@@ -266,6 +274,22 @@ export default function StaffPage() {
               <div className={styles.permissionsSection}>
                 <span className={styles.permTitle}>Dashboard Access Keys</span>
                 
+                {/* Overview Access */}
+                <div className={styles.permRow}>
+                  <div className={styles.permLabel}>
+                    <span className={styles.permName}>Overview Page</span>
+                    <span className={styles.permDesc}>View dashboard home stats overview</span>
+                  </div>
+                  <label className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={member.permissions.overview}
+                      onChange={() => handlePermissionToggle(member.id, 'overview')}
+                    />
+                    <span className={styles.slider} />
+                  </label>
+                </div>
+
                 {/* Subscriptions Access */}
                 <div className={styles.permRow}>
                   <div className={styles.permLabel}>
@@ -309,6 +333,54 @@ export default function StaffPage() {
                       type="checkbox"
                       checked={member.permissions.settings}
                       onChange={() => handlePermissionToggle(member.id, 'settings')}
+                    />
+                    <span className={styles.slider} />
+                  </label>
+                </div>
+
+                {/* Orders Access */}
+                <div className={styles.permRow}>
+                  <div className={styles.permLabel}>
+                    <span className={styles.permName}>Orders Management</span>
+                    <span className={styles.permDesc}>View and process customer orders</span>
+                  </div>
+                  <label className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={member.permissions.orders}
+                      onChange={() => handlePermissionToggle(member.id, 'orders')}
+                    />
+                    <span className={styles.slider} />
+                  </label>
+                </div>
+
+                {/* Chat Access */}
+                <div className={styles.permRow}>
+                  <div className={styles.permLabel}>
+                    <span className={styles.permName}>Support Chat Console</span>
+                    <span className={styles.permDesc}>Claim support tickets and chat with customers</span>
+                  </div>
+                  <label className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={member.permissions.chat}
+                      onChange={() => handlePermissionToggle(member.id, 'chat')}
+                    />
+                    <span className={styles.slider} />
+                  </label>
+                </div>
+
+                {/* Payments Access */}
+                <div className={styles.permRow}>
+                  <div className={styles.permLabel}>
+                    <span className={styles.permName}>Payments Registry</span>
+                    <span className={styles.permDesc}>View payment transactions and receipts</span>
+                  </div>
+                  <label className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={member.permissions.payments}
+                      onChange={() => handlePermissionToggle(member.id, 'payments')}
                     />
                     <span className={styles.slider} />
                   </label>

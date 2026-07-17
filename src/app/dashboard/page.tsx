@@ -4,7 +4,6 @@ import React, { useEffect, useState } from 'react';
 import { useDashboard } from './layout';
 import styles from './page.module.css';
 import {
-  TrendingUp,
   DollarSign,
   Users,
   CreditCard,
@@ -14,7 +13,10 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
-  AlertCircle
+  AlertCircle,
+  X,
+  Check,
+  Search
 } from 'lucide-react';
 
 interface Order {
@@ -50,6 +52,23 @@ export default function DashboardHome() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Tracking states
+  const [trackingInput, setTrackingInput] = useState('');
+  const [trackModalOpen, setTrackModalOpen] = useState(false);
+  const [trackedOrder, setTrackedOrder] = useState<any>(null);
+  const [trackError, setTrackError] = useState<string | null>(null);
+  const [isTracking, setIsTracking] = useState(false);
+
+  const [stats, setStats] = useState({
+    totalSales: '$0.00',
+    activeSubscriptions: 0,
+    assignedStaff: 0,
+    gatewayStatus: 'Active',
+  });
+  const [recentPurchases, setRecentPurchases] = useState<any[]>([]);
+  const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [isOverviewLoading, setIsOverviewLoading] = useState(true);
+
   useEffect(() => {
     if (!user) return;
 
@@ -79,7 +98,43 @@ export default function DashboardHome() {
     loadDashboardData();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || user.role === 'customer') return;
+
+    async function loadOverviewStats() {
+      try {
+        const response = await fetch('/api/analytics');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            setStats(data.stats);
+            setRecentPurchases(data.recentPurchases);
+            setSystemLogs(data.systemLogs);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading overview data:', err);
+      } finally {
+        setIsOverviewLoading(false);
+      }
+    }
+
+    loadOverviewStats();
+  }, [user]);
+
   if (!user) return null;
+
+  if (user.role !== 'admin' && user.role !== 'customer' && !user.permissions?.overview) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '120px 24px', gap: '16px' }}>
+        <AlertCircle size={48} color="#ef4444" />
+        <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a' }}>Access Denied</h2>
+        <p style={{ color: '#64748b', fontSize: '14.5px', maxWidth: '360px', textAlign: 'center', lineHeight: '1.5' }}>
+          You do not have the required permissions to access the Platform Overview. Please contact your system administrator.
+        </p>
+      </div>
+    );
+  }
 
   // Dynamically branch for CUSTOMER role
   if (user.role === 'customer') {
@@ -123,6 +178,39 @@ export default function DashboardHome() {
       return matched ? matched.id : null;
     };
 
+    const handleTrackOrderSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!trackingInput.trim()) return;
+
+      setIsTracking(true);
+      setTrackError(null);
+      setTrackedOrder(null);
+
+      try {
+        const response = await fetch(`/api/orders/track?id=${trackingInput.trim()}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Tracking details not found.');
+        }
+
+        setTrackedOrder(data.order);
+        setTrackModalOpen(true);
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : 'Tracking search failed.';
+        setTrackError(errorMessage);
+        alert(errorMessage);
+      } finally {
+        setIsTracking(false);
+      }
+    };
+
+    const getStatusStepIndex = (status: string) => {
+      if (status === 'completed') return 3;
+      if (status === 'paid') return 2;
+      return 1;
+    };
+
     return (
       <div className="animate-fade-in">
         {error && (
@@ -133,10 +221,56 @@ export default function DashboardHome() {
         )}
         {/* Welcome Customer Banner */}
         <div className={styles.welcomeCard}>
-          <h1 className={styles.welcomeTitle}>Hello, {user.name}!</h1>
-          <p className={styles.welcomeDesc}>
-            Manage and view your active premium subscriptions here. You can renew expired packages or place new orders directly.
-          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <h1 className={styles.welcomeTitle}>Hello, {user.name}!</h1>
+            <p className={styles.welcomeDesc}>
+              Manage and view your active premium subscriptions here. You can renew expired packages or place new orders directly.
+            </p>
+          </div>
+          
+          {/* Quick Track Order Search Box */}
+          <div style={{ marginTop: '24px', maxWidth: '420px' }}>
+            <form onSubmit={handleTrackOrderSubmit} style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                placeholder="Enter Tracking ID (e.g. PH-XXXXXX)"
+                value={trackingInput}
+                onChange={(e) => setTrackingInput(e.target.value)}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  borderRadius: '8px',
+                  color: '#ffffff',
+                  fontSize: '13.5px',
+                  outline: 'none',
+                }}
+                required
+              />
+              <button
+                type="submit"
+                style={{
+                  background: 'var(--accent-purple)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 18px',
+                  fontSize: '13.5px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'opacity 0.2s',
+                }}
+                disabled={isTracking}
+              >
+                {isTracking ? <Loader2 className={styles.spinner} size={14} /> : <Search size={14} />}
+                <span>Track Order</span>
+              </button>
+            </form>
+          </div>
         </div>
 
         {/* Customer Stats Row */}
@@ -183,7 +317,7 @@ export default function DashboardHome() {
 
         {/* Active Subscriptions Grid */}
         <div style={{ marginTop: '36px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#ffffff', marginBottom: '16px' }}>My Active Subscriptions</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '16px' }}>My Active Subscriptions</h2>
           {activeSubs.length === 0 ? (
             <div className={`${styles.panel} glassmorphism`} style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
               <CreditCard size={32} style={{ marginBottom: '12px', color: '#4b5563' }} />
@@ -204,7 +338,7 @@ export default function DashboardHome() {
                   <div key={sub.id} className={`${styles.customerSubCard} glassmorphism`}>
                     <div className={styles.customerSubHeader}>
                       <div>
-                        <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#ffffff' }}>{sub.subscription_name}</h3>
+                        <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{sub.subscription_name}</h3>
                         <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>ID: {sub.tracking_id}</span>
                       </div>
                       <span className={styles.badgeSuccess}>Active</span>
@@ -236,6 +370,99 @@ export default function DashboardHome() {
             </div>
           )}
         </div>
+
+        {/* Track Order Modal */}
+        {trackModalOpen && trackedOrder && (
+          <div className={styles.modalOverlay} onClick={() => setTrackModalOpen(false)}>
+            <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h2 className={styles.modalTitle}>Track Order Details</h2>
+                <button
+                  type="button"
+                  className={styles.closeBtn}
+                  onClick={() => setTrackModalOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ paddingBottom: '10px', borderBottom: '1px solid var(--border-light)' }}>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)' }}>
+                    Service Ordered: <strong style={{ color: 'var(--text-primary)' }}>{trackedOrder.subscription_name}</strong>
+                  </p>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Price paid: <strong style={{ color: 'var(--accent-purple)' }}>{trackedOrder.price.toFixed(2)} {trackedOrder.currency}</strong>
+                  </p>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Date: <strong style={{ color: 'var(--text-primary)' }}>{new Date(trackedOrder.created_at).toLocaleDateString()}</strong>
+                  </p>
+                  <p style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                    Tracking ID: <strong style={{ color: 'var(--text-primary)', fontFamily: 'monospace' }}>{trackedOrder.tracking_id}</strong>
+                  </p>
+                </div>
+
+                <div className={styles.timeline}>
+                  <div className={styles.timelineLine} />
+                  
+                  {(() => {
+                    const step = getStatusStepIndex(trackedOrder.status);
+                    let w = '0%';
+                    if (step === 2) w = '50%';
+                    if (step === 3) w = '100%';
+                    return <div className={styles.timelineLineActive} style={{ width: w }} />;
+                  })()}
+
+                  <div className={styles.timelineStep}>
+                    <div className={`${styles.stepCircle} ${styles.stepCircleActive} ${
+                      getStatusStepIndex(trackedOrder.status) >= 1 ? styles.stepCircleCompleted : ''
+                    }`}>
+                      {getStatusStepIndex(trackedOrder.status) >= 1 ? <Check size={14} /> : '1'}
+                    </div>
+                    <span className={`${styles.stepLabel} ${styles.stepLabelActive}`}>Placed</span>
+                  </div>
+
+                  <div className={styles.timelineStep}>
+                    <div className={`${styles.stepCircle} ${
+                      getStatusStepIndex(trackedOrder.status) >= 2 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
+                    }`}>
+                      {getStatusStepIndex(trackedOrder.status) >= 2 ? <Check size={14} /> : '2'}
+                    </div>
+                    <span className={`${styles.stepLabel} ${
+                      getStatusStepIndex(trackedOrder.status) >= 2 ? styles.stepLabelActive : ''
+                    }`}>Verified</span>
+                  </div>
+
+                  <div className={styles.timelineStep}>
+                    <div className={`${styles.stepCircle} ${
+                      getStatusStepIndex(trackedOrder.status) >= 3 ? `${styles.stepCircleActive} ${styles.stepCircleCompleted}` : ''
+                    }`}>
+                      {getStatusStepIndex(trackedOrder.status) >= 3 ? <Check size={14} /> : '3'}
+                    </div>
+                    <span className={`${styles.stepLabel} ${
+                      getStatusStepIndex(trackedOrder.status) >= 3 ? styles.stepLabelActive : ''
+                    }`}>Done</span>
+                  </div>
+                </div>
+
+                <div style={{ textAlign: 'center', background: 'var(--bg-tertiary)', border: '1px solid var(--border-light)', padding: '12px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13.5px', color: 'var(--text-secondary)' }}>
+                    Current Status: 
+                  </span>
+                  <span style={{ 
+                    marginLeft: '8px', 
+                    fontSize: '13.5px', 
+                    fontWeight: 700, 
+                    color: trackedOrder.status === 'completed' ? '#10b981' : trackedOrder.status === 'paid' ? '#3b82f6' : '#f59e0b',
+                    textTransform: 'uppercase'
+                  }}>
+                    {trackedOrder.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Expired and Pending Split Grid */}
         <div className={styles.dashboardGrid} style={{ marginTop: '36px' }}>
@@ -291,9 +518,9 @@ export default function DashboardHome() {
                 {expiredSubs.map((sub) => {
                   const renewalId = findRenewalId(sub.subscription_name);
                   return (
-                    <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid rgba(255,255,255,0.04)', padding: '12px 16px', borderRadius: '12px' }}>
+                    <div key={sub.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', padding: '12px 16px', borderRadius: '12px' }}>
                       <div>
-                        <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#ffffff' }}>{sub.subscription_name}</h4>
+                        <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{sub.subscription_name}</h4>
                         <span style={{ fontSize: '12px', color: '#6b7280' }}>Expired on: {sub.expires_at ? new Date(sub.expires_at).toLocaleDateString() : 'N/A'}</span>
                       </div>
                       {renewalId && (
@@ -329,32 +556,18 @@ export default function DashboardHome() {
     );
   }
 
-  // REST OF CODE: Original staff/admin dashboard
-  const recentPurchases = [
-    { id: 'TXN-9081', user: 'Sarah Jenkins', package: 'Enterprise Monthly', amount: '$149.00', country: 'United States', status: 'Completed' },
-    { id: 'TXN-9080', user: 'Kenji Sato', package: 'Developer Annual', amount: '$499.00', country: 'Japan', status: 'Completed' },
-    { id: 'TXN-9079', user: 'Maria Dupont', package: 'Pro Monthly', amount: '$49.00', country: 'France', status: 'Pending' },
-    { id: 'TXN-9078', user: 'Amit Patel', package: 'Enterprise Monthly', amount: '$149.00', country: 'India', status: 'Completed' },
-    { id: 'TXN-9077', user: 'Liam Wilson', package: 'Pro Monthly', amount: '$49.00', country: 'United Kingdom', status: 'Completed' },
-  ];
-
-  const systemLogs = [
-    { text: 'Dynamic country router configured localized currency for Canada (CAD).', time: '10 minutes ago' },
-    { text: 'Sarah Jenkins purchased "Enterprise Monthly" subscription package.', time: '24 minutes ago' },
-    { text: 'Kenji Sato upgraded to "Developer Annual" subscription plan.', time: '1 hour ago' },
-    { text: 'Staff account permissions updated for staff@premiumhub.com.', time: '3 hours ago' },
-    { text: 'System automatically synchronized global tax configurations for EU countries.', time: '6 hours ago' },
-  ];
+  if (isOverviewLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '16px' }}>
+        <Loader2 size={36} color="#8b5cf6" />
+        <span style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Loading platform dashboard...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
-      {/* Welcome Card banner */}
-      <div className={styles.welcomeCard}>
-        <h1 className={styles.welcomeTitle}>Welcome back, {user.name}!</h1>
-        <p className={styles.welcomeDesc}>
-          Here is what is happening with the **Premium Hub** platform today. You are currently logged in as an **{user.role}** with customized dashboard access.
-        </p>
-      </div>
+
 
       {/* Statistics Row */}
       <div className={styles.statsGrid}>
@@ -365,11 +578,9 @@ export default function DashboardHome() {
               <DollarSign size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>$48,256.40</div>
+          <div className={styles.statValue}>{stats.totalSales}</div>
           <div className={styles.statFooter}>
-            <TrendingUp size={16} className={styles.trendUp} />
-            <span className={styles.trendUp}>+12.4%</span>
-            <span className={styles.trendMuted}>vs last month</span>
+            <span className={styles.trendMuted}>All channels tracked in USD</span>
           </div>
         </div>
 
@@ -380,11 +591,9 @@ export default function DashboardHome() {
               <CreditCard size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>1,284</div>
+          <div className={styles.statValue}>{stats.activeSubscriptions}</div>
           <div className={styles.statFooter}>
-            <TrendingUp size={16} className={styles.trendUp} />
-            <span className={styles.trendUp}>+8.2%</span>
-            <span className={styles.trendMuted}>vs last week</span>
+            <span className={styles.trendMuted}>Active client service profiles</span>
           </div>
         </div>
 
@@ -395,7 +604,7 @@ export default function DashboardHome() {
               <Users size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>8</div>
+          <div className={styles.statValue}>{stats.assignedStaff}</div>
           <div className={styles.statFooter}>
             <span className={styles.trendMuted}>All users managed dynamically</span>
           </div>
@@ -408,7 +617,7 @@ export default function DashboardHome() {
               <Globe2 size={20} />
             </div>
           </div>
-          <div className={styles.statValue}>Active</div>
+          <div className={styles.statValue}>{stats.gatewayStatus}</div>
           <div className={styles.statFooter}>
             <span className={styles.trendUp}>99.98%</span>
             <span className={styles.trendMuted}>Localized routers online</span>
@@ -421,41 +630,47 @@ export default function DashboardHome() {
         {/* Recent Purchases Table */}
         <div className={`${styles.panel} glassmorphism`}>
           <h3 className={styles.panelTitle}>Recent Subscriptions Selling Activity</h3>
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th className={styles.th}>Transaction ID</th>
-                  <th className={styles.th}>Subscriber</th>
-                  <th className={styles.th}>Plan Package</th>
-                  <th className={styles.th}>Amount</th>
-                  <th className={styles.th}>Country Location</th>
-                  <th className={styles.th}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPurchases.map((txn) => (
-                  <tr key={txn.id}>
-                    <td className={styles.td} style={{ fontFamily: 'monospace', fontWeight: 600 }}>{txn.id}</td>
-                    <td className={styles.td} style={{ fontWeight: 600 }}>{txn.user}</td>
-                    <td className={styles.td}>{txn.package}</td>
-                    <td className={styles.td} style={{ color: 'var(--accent-purple)', fontWeight: 600 }}>{txn.amount}</td>
-                    <td className={styles.td}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Globe2 size={14} style={{ color: 'var(--text-secondary)' }} />
-                        {txn.country}
-                      </span>
-                    </td>
-                    <td className={styles.td}>
-                      <span className={`${styles.badge} ${txn.status === 'Completed' ? styles.badgeSuccess : styles.badgeWarning}`}>
-                        {txn.status}
-                      </span>
-                    </td>
+          {recentPurchases.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+              No transactions recorded yet.
+            </div>
+          ) : (
+            <div className={styles.tableWrapper}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th className={styles.th}>Transaction ID</th>
+                    <th className={styles.th}>Subscriber</th>
+                    <th className={styles.th}>Plan Package</th>
+                    <th className={styles.th}>Amount</th>
+                    <th className={styles.th}>Country Location</th>
+                    <th className={styles.th}>Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {recentPurchases.map((txn) => (
+                    <tr key={txn.id}>
+                      <td className={styles.td} style={{ fontFamily: 'monospace', fontWeight: 600 }}>{txn.id}</td>
+                      <td className={styles.td} style={{ fontWeight: 600 }}>{txn.user}</td>
+                      <td className={styles.td}>{txn.package}</td>
+                      <td className={styles.td} style={{ color: 'var(--accent-purple)', fontWeight: 600 }}>{txn.amount}</td>
+                      <td className={styles.td}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Globe2 size={14} style={{ color: 'var(--text-secondary)' }} />
+                          {txn.country}
+                        </span>
+                      </td>
+                      <td className={styles.td}>
+                        <span className={`${styles.badge} ${txn.status === 'Completed' ? styles.badgeSuccess : styles.badgeWarning}`}>
+                          {txn.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {/* Global System Activities */}

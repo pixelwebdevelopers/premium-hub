@@ -17,7 +17,11 @@ import {
   Mail,
   User,
   ShieldCheck,
-  RefreshCw
+  RefreshCw,
+  Menu,
+  X,
+  ChevronDown,
+  Layout
 } from 'lucide-react';
 import styles from './checkout.module.css';
 import { uploadReceipt } from '../../lib/firebase';
@@ -111,6 +115,7 @@ function CheckoutForm() {
 
   // Selected language state
   const [activeLang, setActiveLang] = useState('en');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Checkout inputs
   const [checkoutName, setCheckoutName] = useState('');
@@ -592,20 +597,12 @@ function CheckoutForm() {
           />
         </div>
 
-        <div className={styles.navActions}>
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '8px', 
-            color: '#94a3b8', 
-            fontSize: '13.5px', 
-            background: 'rgba(255,255,255,0.02)', 
-            padding: '8px 16px', 
-            borderRadius: '10px', 
-            border: '1px solid rgba(255,255,255,0.06)' 
-          }}>
+        {/* Desktop Actions */}
+        <div className={styles.navActionsDesktop}>
+          <div className={styles.regionBadge}>
             <Globe size={16} style={{ color: '#c084fc' }} />
-            <span>Region: {countryName} ({countryCode})</span>
+            <span className={styles.regionText}>Region: {countryName} ({countryCode})</span>
+            <span className={styles.regionCodeMobile}>{countryCode}</span>
           </div>
 
           <div className={styles.languageDropdownWrapper}>
@@ -621,8 +618,145 @@ function CheckoutForm() {
               ))}
             </select>
           </div>
+
+          {/* Dashboard / Account Button if logged in */}
+          {currentUser ? (
+            <button
+              type="button"
+              className={styles.dashboardLinkBtn}
+              onClick={() => router.push('/dashboard')}
+            >
+              <Layout size={16} />
+              <span>Go to Dashboard</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.trackBtn}
+              onClick={() => router.push('/login')}
+            >
+              <span>Sign In</span>
+            </button>
+          )}
         </div>
+
+        {/* Mobile Hamburger Trigger */}
+        <button
+          type="button"
+          className={styles.mobileHamburgerBtn}
+          onClick={() => setMobileMenuOpen(true)}
+          aria-label="Open mobile menu"
+        >
+          <Menu size={24} />
+        </button>
       </header>
+
+      {/* Mobile Drawer Sidebar */}
+      {mobileMenuOpen && (
+        <div className={styles.mobileDrawerOverlay} onClick={() => setMobileMenuOpen(false)}>
+          <div className={styles.mobileDrawerContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.mobileDrawerHeader}>
+              <Image
+                src="/premium-hub-logo-v4.png"
+                alt="Premium Hub Logo"
+                width={140}
+                height={40}
+                style={{ objectFit: 'contain' }}
+              />
+              <button
+                type="button"
+                className={styles.mobileDrawerCloseBtn}
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close mobile menu"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className={styles.mobileDrawerBody}>
+              {/* Region Display */}
+              <div className={styles.mobileDrawerSection}>
+                <span className={styles.mobileDrawerLabel}>Selected Region</span>
+                <div className={styles.regionBadge} style={{ width: '100%', justifyContent: 'center' }}>
+                  <Globe size={16} style={{ color: '#c084fc' }} />
+                  <span>{countryName} ({countryCode})</span>
+                </div>
+              </div>
+
+              {/* Language Selector */}
+              <div className={styles.mobileDrawerSection}>
+                <span className={styles.mobileDrawerLabel}>Select Language</span>
+                <div className={styles.languageDropdownWrapper} style={{ width: '100%' }}>
+                  <select
+                    className={styles.languageSelect}
+                    value={activeLang}
+                    onChange={(e) => handleLangChange(e.target.value)}
+                    style={{ width: '100%', textAlign: 'center' }}
+                  >
+                    {LANGUAGES.map((l) => (
+                      <option key={l.code} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Support Links */}
+              <div className={styles.mobileDrawerSection}>
+                <span className={styles.mobileDrawerLabel}>Support Pages</span>
+                <div className={styles.mobileDrawerNav}>
+                  <Link href="/support/help-center" className={styles.mobileDrawerLink} onClick={() => setMobileMenuOpen(false)}>
+                    Help Center
+                  </Link>
+                  <Link href="/support/how-it-works" className={styles.mobileDrawerLink} onClick={() => setMobileMenuOpen(false)}>
+                    How It Works
+                  </Link>
+                  <Link href="/support/payment-methods" className={styles.mobileDrawerLink} onClick={() => setMobileMenuOpen(false)}>
+                    Payment Methods
+                  </Link>
+                  <Link href="/support/refund-policy" className={styles.mobileDrawerLink} onClick={() => setMobileMenuOpen(false)}>
+                    Refund Policy
+                  </Link>
+                  <Link href="/support/terms-of-service" className={styles.mobileDrawerLink} onClick={() => setMobileMenuOpen(false)}>
+                    Terms of Service
+                  </Link>
+                </div>
+              </div>
+
+              {/* Dashboard / Login Button */}
+              <div className={styles.mobileDrawerFooter}>
+                {currentUser ? (
+                  <button
+                    type="button"
+                    className={styles.dashboardLinkBtn}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      router.push('/dashboard');
+                    }}
+                    style={{ width: '100%', justifyContent: 'center', padding: '14px' }}
+                  >
+                    <Layout size={16} />
+                    <span>Go to Dashboard</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.trackBtn}
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      router.push('/login');
+                    }}
+                    style={{ width: '100%', justifyContent: 'center', padding: '14px' }}
+                  >
+                    <span>Sign In</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Layout Main */}
       <main className={styles.main}>

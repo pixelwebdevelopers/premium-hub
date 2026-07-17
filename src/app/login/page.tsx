@@ -68,9 +68,9 @@ export default function LoginPage() {
     };
 
     const resizeCanvas = () => {
-      if (!canvas) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (!canvas || !canvas.parentElement) return;
+      canvas.width = canvas.parentElement.offsetWidth;
+      canvas.height = canvas.parentElement.offsetHeight;
       initParticles();
     };
 
@@ -319,251 +319,265 @@ export default function LoginPage() {
 
   return (
     <div className={styles.container}>
-      <canvas ref={canvasRef} className={styles.canvas} />
-      
-      <div className={styles.glowBlob1} />
-      <div className={styles.glowBlob2} />
-
-      <div className={`${styles.loginCard} animate-fade-in`}>
-        <div className={styles.header}>
-          <div className={styles.logoWrapper} style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
+      <div className={styles.splitWrapper}>
+        {/* LEFT: Hero Image Column */}
+        <div className={styles.artworkColumn}>
+          <div className={styles.artworkImageWrapper}>
             <Image
-              src="/premium-hub-logo-v4.png"
-              alt="Premium Hub Logo"
-              width={200}
-              height={60}
-              style={{ objectFit: 'contain' }}
+              src="/login-hero-v2.png"
+              alt="Entertainment streaming platforms"
+              fill
+              className={styles.artworkImage}
               priority
             />
           </div>
-          <p className={styles.subtitle}>
-            {verificationMode 
-              ? 'Verify your customer account' 
-              : activeTab === 'login' 
-                ? 'Sign in to access your dashboard' 
-                : 'Create an account to track subscriptions'}
-          </p>
         </div>
 
-        {error && (
-          <div className={styles.errorBanner}>
-            <ShieldAlert size={18} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {success && (
-          <div className={styles.successBanner}>
-            <Check size={18} />
-            <span>{success}</span>
-          </div>
-        )}
-
-        {verificationMode ? (
-          /* OTP verification form */
-          <form onSubmit={handleVerifyOTP} className={styles.form}>
-            <div className={styles.formGroup} style={{ textAlign: 'center' }}>
-              <label htmlFor="otpCode" className={styles.label} style={{ display: 'block', marginBottom: '8px' }}>
-                Enter Verification Code (OTP)
-              </label>
-              <div className={styles.inputWrapper}>
-                <input
-                  id="otpCode"
-                  type="text"
-                  maxLength={6}
-                  className={styles.input}
-                  style={{ textAlign: 'center', fontSize: '20px', letterSpacing: '6px', paddingLeft: '16px', fontFamily: 'monospace', fontWeight: 'bold' }}
-                  placeholder="000000"
-                  value={verificationCode}
-                  onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
-                  disabled={isVerifying}
-                  required
+        {/* RIGHT: Form Column with animated dots background */}
+        <div className={styles.formColumn}>
+          <canvas ref={canvasRef} className={styles.canvas} />
+          <div className={styles.loginCard}>
+            <div className={styles.header}>
+              <div className={styles.logoWrapper} style={{ cursor: 'pointer' }} onClick={() => router.push('/')}>
+                <Image
+                  src="/premium-hub-logo-v4.png"
+                  alt="Premium Hub Logo"
+                  width={200}
+                  height={60}
+                  style={{ objectFit: 'contain' }}
+                  priority
                 />
               </div>
+              <p className={styles.subtitle}>
+                {verificationMode 
+                  ? 'Verify your customer account' 
+                  : activeTab === 'login' 
+                    ? 'Sign in to access your dashboard' 
+                    : 'Create an account to track subscriptions'}
+              </p>
             </div>
 
-            <button
-              type="submit"
-              className={styles.submitBtn}
-              disabled={isVerifying || verificationCode.length !== 6}
-            >
-              {isVerifying ? (
-                <>
-                  <Loader2 className={styles.spinner} size={18} />
-                  <span>Verifying...</span>
-                </>
-              ) : (
-                <span>Verify and Login</span>
-              )}
-            </button>
+            {error && (
+              <div className={styles.errorBanner}>
+                <ShieldAlert size={18} />
+                <span>{error}</span>
+              </div>
+            )}
 
-            <button
-              type="button"
-              className={styles.backLink}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', gap: '4px' }}
-              onClick={handleResendOTP}
-              disabled={isResending}
-            >
-              {isResending ? <Loader2 className={styles.spinner} size={14} /> : <RefreshCw size={14} />}
-              <span>Resend OTP Code</span>
-            </button>
+            {success && (
+              <div className={styles.successBanner}>
+                <Check size={18} />
+                <span>{success}</span>
+              </div>
+            )}
 
-            <button
-              type="button"
-              className={styles.backLink}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', marginTop: '16px' }}
-              onClick={() => {
-                setVerificationMode(false);
-                setError(null);
-                setSuccess(null);
-              }}
-            >
-              <ArrowLeft size={14} />
-              <span>Back to Login</span>
-            </button>
-          </form>
-        ) : (
-          /* Main login/register forms */
-          <>
-            {/* Tab Swappers */}
-            <div className={styles.tabs}>
-              <button
-                type="button"
-                className={`${styles.tab} ${activeTab === 'login' ? styles.activeTab : ''}`}
-                onClick={() => {
-                  setActiveTab('login');
-                  setError(null);
-                  setSuccess(null);
-                }}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                className={`${styles.tab} ${activeTab === 'register' ? styles.activeTab : ''}`}
-                onClick={() => {
-                  setActiveTab('register');
-                  setError(null);
-                  setSuccess(null);
-                }}
-              >
-                Create Account
-              </button>
-            </div>
-
-            <form onSubmit={handleAuthSubmit}>
-              {activeTab === 'register' && (
-                <div className={styles.formGroup}>
-                  <label htmlFor="name" className={styles.label}>
-                    Full Name
+            {verificationMode ? (
+              /* OTP verification form */
+              <form onSubmit={handleVerifyOTP} className={styles.form}>
+                <div className={styles.formGroup} style={{ textAlign: 'center' }}>
+                  <label htmlFor="otpCode" className={styles.label} style={{ display: 'block', marginBottom: '8px' }}>
+                    Enter Verification Code (OTP)
                   </label>
                   <div className={styles.inputWrapper}>
                     <input
-                      id="name"
+                      id="otpCode"
                       type="text"
+                      maxLength={6}
                       className={styles.input}
-                      placeholder="John Doe"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      disabled={isLoading}
+                      style={{ textAlign: 'center', fontSize: '20px', letterSpacing: '6px', paddingLeft: '16px', fontFamily: 'monospace', fontWeight: 'bold' }}
+                      placeholder="000000"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ''))}
+                      disabled={isVerifying}
                       required
                     />
-                    <User className={styles.inputIcon} size={16} />
                   </div>
                 </div>
-              )}
 
-              <div className={styles.formGroup}>
-                <label htmlFor="email" className={styles.label}>
-                  Email Address
-                </label>
-                <div className={styles.inputWrapper}>
-                  <input
-                    id="email"
-                    type="email"
-                    className={styles.input}
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={isLoading}
-                    required
-                  />
-                  <Mail className={styles.inputIcon} size={16} />
-                </div>
-              </div>
+                <button
+                  type="submit"
+                  className={styles.submitBtn}
+                  disabled={isVerifying || verificationCode.length !== 6}
+                >
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className={styles.spinner} size={18} />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <span>Verify and Login</span>
+                  )}
+                </button>
 
-              <div className={styles.formGroup}>
-                <label htmlFor="password" className={styles.label}>
-                  Password
-                </label>
-                <div className={styles.inputWrapper}>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    className={styles.input}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    disabled={isLoading}
-                    required
-                  />
-                  <Lock className={styles.inputIcon} size={16} />
+                <button
+                  type="button"
+                  className={styles.backLink}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', gap: '4px' }}
+                  onClick={handleResendOTP}
+                  disabled={isResending}
+                >
+                  {isResending ? <Loader2 className={styles.spinner} size={14} /> : <RefreshCw size={14} />}
+                  <span>Resend OTP Code</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={styles.backLink}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', marginTop: '16px' }}
+                  onClick={() => {
+                    setVerificationMode(false);
+                    setError(null);
+                    setSuccess(null);
+                  }}
+                >
+                  <ArrowLeft size={14} />
+                  <span>Back to Login</span>
+                </button>
+              </form>
+            ) : (
+              /* Main login/register forms */
+              <>
+                {/* Tab Swappers */}
+                <div className={styles.tabs}>
                   <button
                     type="button"
-                    className={styles.eyeButton}
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isLoading}
+                    className={`${styles.tab} ${activeTab === 'login' ? styles.activeTab : ''}`}
+                    onClick={() => {
+                      setActiveTab('login');
+                      setError(null);
+                      setSuccess(null);
+                    }}
                   >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    Sign In
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.tab} ${activeTab === 'register' ? styles.activeTab : ''}`}
+                    onClick={() => {
+                      setActiveTab('register');
+                      setError(null);
+                      setSuccess(null);
+                    }}
+                  >
+                    Create Account
                   </button>
                 </div>
-              </div>
 
-              {activeTab === 'register' && (
-                <div className={styles.formGroup}>
-                  <label htmlFor="confirmPassword" className={styles.label}>
-                    Confirm Password
-                  </label>
-                  <div className={styles.inputWrapper}>
-                    <input
-                      id="confirmPassword"
-                      type={showPassword ? 'text' : 'password'}
-                      className={styles.input}
-                      placeholder="••••••••"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                    <Lock className={styles.inputIcon} size={16} />
+                <form onSubmit={handleAuthSubmit}>
+                  {activeTab === 'register' && (
+                    <div className={styles.formGroup}>
+                      <label htmlFor="name" className={styles.label}>
+                        Full Name
+                      </label>
+                      <div className={styles.inputWrapper}>
+                        <input
+                          id="name"
+                          type="text"
+                          className={styles.input}
+                          placeholder="John Doe"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          disabled={isLoading}
+                          required
+                        />
+                        <User className={styles.inputIcon} size={16} />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className={styles.formGroup}>
+                    <label htmlFor="email" className={styles.label}>
+                      Email Address
+                    </label>
+                    <div className={styles.inputWrapper}>
+                      <input
+                        id="email"
+                        type="email"
+                        className={styles.input}
+                        placeholder="name@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        disabled={isLoading}
+                        required
+                      />
+                      <Mail className={styles.inputIcon} size={16} />
+                    </div>
                   </div>
-                </div>
-              )}
 
-              <button
-                type="submit"
-                className={styles.submitBtn}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className={styles.spinner} size={18} />
-                    <span>Processing...</span>
-                  </>
-                ) : activeTab === 'login' ? (
-                  <span>Sign In</span>
-                ) : (
-                  <span>Register Account</span>
-                )}
-              </button>
-            </form>
-          </>
-        )}
+                  <div className={styles.formGroup}>
+                    <label htmlFor="password" className={styles.label}>
+                      Password
+                    </label>
+                    <div className={styles.inputWrapper}>
+                      <input
+                        id="password"
+                        type={showPassword ? 'text' : 'password'}
+                        className={styles.input}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={isLoading}
+                        required
+                      />
+                      <Lock className={styles.inputIcon} size={16} />
+                      <button
+                        type="button"
+                        className={styles.eyeButton}
+                        onClick={() => setShowPassword(!showPassword)}
+                        disabled={isLoading}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
 
-        <Link href="/" className={styles.backLink}>
-          <ArrowLeft size={14} />
-          <span>Return to Homepage</span>
-        </Link>
+                  {activeTab === 'register' && (
+                    <div className={styles.formGroup}>
+                      <label htmlFor="confirmPassword" className={styles.label}>
+                        Confirm Password
+                      </label>
+                      <div className={styles.inputWrapper}>
+                        <input
+                          id="confirmPassword"
+                          type={showPassword ? 'text' : 'password'}
+                          className={styles.input}
+                          placeholder="••••••••"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          disabled={isLoading}
+                          required
+                        />
+                        <Lock className={styles.inputIcon} size={16} />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className={styles.submitBtn}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className={styles.spinner} size={18} />
+                        <span>Processing...</span>
+                      </>
+                    ) : activeTab === 'login' ? (
+                      <span>Sign In</span>
+                    ) : (
+                      <span>Register Account</span>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
+
+            <Link href="/" className={styles.backLink}>
+              <ArrowLeft size={14} />
+              <span>Return to Homepage</span>
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );

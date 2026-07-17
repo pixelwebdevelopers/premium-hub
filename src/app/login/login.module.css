@@ -1,22 +1,70 @@
+/* ============================================
+   LOGIN PAGE — 50/50 Split Layout
+   LEFT = Hero Image | RIGHT = Card + Dots
+   ============================================ */
+
 .container {
-  min-height: 100vh;
+  height: 100vh;
+  width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
   overflow: hidden;
-  background-color: #030712;
-  background-image: 
-    radial-gradient(at 50% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.003) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.003) 1px, transparent 1px);
-  background-size: 100% 100%, 64px 64px, 64px 64px;
-  padding: 24px;
+  background-color: #050816;
   font-family: var(--font-geist-sans), sans-serif;
   color: #f3f4f6;
 }
 
-/* Canvas background overlay */
+/* ============================================
+   SPLIT WRAPPER — 50/50 Flex
+   ============================================ */
+.splitWrapper {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+/* ============================================
+   LEFT: Image Column (50%)
+   ============================================ */
+.artworkColumn {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  height: 100vh;
+}
+
+.artworkImageWrapper {
+  position: absolute;
+  inset: 0;
+}
+
+.artworkImage {
+  object-fit: cover;
+  object-position: center center;
+  transition: transform 15s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.artworkColumn:hover .artworkImage {
+  transform: scale(1.06);
+}
+
+/* ============================================
+   RIGHT: Form Column (50%) with dots canvas
+   ============================================ */
+.formColumn {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px;
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: #050816;
+  height: 100vh;
+}
+
+/* Canvas fills the formColumn only */
 .canvas {
   position: absolute;
   top: 0;
@@ -27,110 +75,94 @@
   z-index: 1;
 }
 
-/* Premium Moving Background Glow Blobs */
-.glowBlob1, .glowBlob2 {
-  position: absolute;
-  width: 500px;
-  height: 500px;
-  border-radius: 50%;
-  filter: blur(120px);
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.25;
-}
-
-.glowBlob1 {
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.2) 0%, rgba(59, 130, 246, 0.02) 60%, rgba(0, 0, 0, 0) 80%);
-  top: 15%;
-  left: 20%;
-  animation: floatBlob1 18s ease-in-out infinite alternate;
-}
-
-.glowBlob2 {
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.02) 60%, rgba(0, 0, 0, 0) 80%);
-  bottom: 15%;
-  right: 20%;
-  animation: floatBlob2 22s ease-in-out infinite alternate;
-}
-
-@keyframes floatBlob1 {
-  0% { transform: translate(-10%, -10%) scale(1) rotate(0deg); }
-  50% { transform: translate(15%, 10%) scale(1.15) rotate(90deg); }
-  100% { transform: translate(-5%, 15%) scale(0.9) rotate(180deg); }
-}
-
-@keyframes floatBlob2 {
-  0% { transform: translate(10%, 15%) scale(1.1) rotate(0deg); }
-  50% { transform: translate(-15%, -10%) scale(0.85) rotate(-90deg); }
-  100% { transform: translate(5%, -5%) scale(1) rotate(-180deg); }
-}
-
+/* ============================================
+   FORM CARD — Solid premium dark card
+   ============================================ */
 .loginCard {
   width: 100%;
-  max-width: 450px;
-  border-radius: 24px;
-  padding: 44px 36px;
-  z-index: 2;
+  max-width: 420px;
+  margin: auto 0;
+  background-color: #0c1022;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 40px 36px;
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.03),
+    0 20px 50px -10px rgba(0, 0, 0, 0.6);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
   overflow: hidden;
-  background: rgba(17, 24, 39, 0.7);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 
-    0 30px 60px -15px rgba(0, 0, 0, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    0 0 50px rgba(139, 92, 246, 0.05);
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+  flex-shrink: 0;
 }
 
-.loginCard::before {
+/* Subtle corner glow pulse */
+.loginCard::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, #8b5cf6 0%, #3b82f6 100%);
+  top: -60px;
+  right: -60px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: pulseGlow 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 
 .loginCard:hover {
-  transform: translateY(-4px);
-  border-color: rgba(139, 92, 246, 0.2);
-  box-shadow: 
-    0 35px 70px -12px rgba(0, 0, 0, 0.8),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0 60px rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.08),
+    0 25px 60px -10px rgba(0, 0, 0, 0.7),
+    0 0 30px rgba(139, 92, 246, 0.04);
+  transform: translateY(-3px);
 }
 
+/* ============================================
+   CARD HEADER
+   ============================================ */
 .header {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  margin-bottom: 24px;
-  gap: 12px;
+  margin-bottom: 32px;
+  gap: 10px;
 }
 
 .logoWrapper {
   display: flex;
   align-items: center;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.logoWrapper:hover {
+  transform: scale(1.04);
 }
 
 .subtitle {
-  font-size: 14px;
-  color: #9ca3af;
+  font-size: 13.5px;
+  color: #64748b;
   font-weight: 500;
+  line-height: 1.5;
 }
 
-/* Tabs switcher styling */
+/* ============================================
+   TAB SWITCHER
+   ============================================ */
 .tabs {
   display: flex;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
   padding: 4px;
-  border-radius: 12px;
-  margin-bottom: 24px;
+  border-radius: 14px;
+  margin-bottom: 28px;
   gap: 4px;
 }
 
@@ -138,22 +170,30 @@
   flex: 1;
   background: none;
   border: none;
-  padding: 10px;
-  border-radius: 8px;
-  color: #9ca3af;
-  font-size: 14px;
+  padding: 11px;
+  border-radius: 10px;
+  color: #64748b;
+  font-size: 13.5px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
 }
 
-.activeTab {
-  background: #8b5cf6;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+.tab:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.03);
 }
 
+.activeTab {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+}
+
+/* ============================================
+   FORM ELEMENTS
+   ============================================ */
 .formGroup {
   display: flex;
   flex-direction: column;
@@ -162,9 +202,11 @@
 }
 
 .label {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #d1d5db;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .inputWrapper {
@@ -176,31 +218,44 @@
 .input {
   width: 100%;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 13px 16px;
   padding-left: 44px;
-  font-size: 14.5px;
+  font-size: 14px;
   color: #ffffff;
   outline: none;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.input::placeholder {
+  color: #475569;
+}
+
+.input:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .input:focus {
-  border-color: #8b5cf6;
-  background-color: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 0 15px rgba(139, 92, 246, 0.15);
+  border-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.04);
+  box-shadow:
+    0 0 0 3px rgba(124, 58, 237, 0.08),
+    0 0 20px rgba(124, 58, 237, 0.06);
 }
 
 .inputIcon {
   position: absolute;
-  left: 16px;
-  color: #6b7280;
+  left: 15px;
+  color: #475569;
   pointer-events: none;
+  transition: all 0.25s;
 }
 
 .input:focus ~ .inputIcon {
   color: #a78bfa;
+  transform: scale(1.1);
 }
 
 .eyeButton {
@@ -208,24 +263,28 @@
   right: 14px;
   background: none;
   border: none;
-  color: #6b7280;
+  color: #475569;
   cursor: pointer;
   padding: 4px;
-  transition: color 0.2s;
+  transition: all 0.2s;
+  border-radius: 6px;
 }
 
 .eyeButton:hover {
-  color: #ffffff;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.05);
 }
 
-/* Submit and Action Buttons */
+/* ============================================
+   SUBMIT BUTTON
+   ============================================ */
 .submitBtn {
   width: 100%;
-  background: linear-gradient(135deg, #7c3aed 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 40%, #4f46e5 100%);
   border: none;
   border-radius: 12px;
   padding: 14px;
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #ffffff;
   cursor: pointer;
@@ -234,22 +293,55 @@
   justify-content: center;
   gap: 8px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  margin-top: 10px;
+  margin-top: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Shimmer sweep */
+.submitBtn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  transition: left 0.5s ease;
+}
+
+.submitBtn:hover::after {
+  left: 100%;
 }
 
 .submitBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+  box-shadow:
+    0 8px 20px rgba(124, 58, 237, 0.3),
+    0 0 40px rgba(124, 58, 237, 0.08);
+}
+
+.submitBtn:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .submitBtn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none !important;
 }
 
+/* ============================================
+   FEEDBACK BANNERS
+   ============================================ */
 .errorBanner {
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
@@ -258,11 +350,21 @@
   color: #f87171;
   font-size: 13.5px;
   margin-bottom: 24px;
+  animation: shakeIn 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes shakeIn {
+  0% { transform: translateX(0); opacity: 0; }
+  15% { transform: translateX(-8px); }
+  30% { transform: translateX(6px); }
+  45% { transform: translateX(-4px); }
+  60% { transform: translateX(2px); opacity: 1; }
+  100% { transform: translateX(0); }
 }
 
 .successBanner {
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
   border-radius: 12px;
   padding: 12px 16px;
   display: flex;
@@ -271,6 +373,12 @@
   color: #34d399;
   font-size: 13.5px;
   margin-bottom: 24px;
+  animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .spinner {
@@ -286,14 +394,112 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13.5px;
-  color: #9ca3af;
-  margin-top: 24px;
-  transition: color 0.2s;
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 28px;
+  transition: all 0.2s;
   justify-content: center;
   width: 100%;
 }
 
 .backLink:hover {
   color: #a78bfa;
+  gap: 8px;
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Medium laptops (1024–1280px) — tighten padding */
+@media (max-width: 1280px) {
+  .formColumn {
+    padding: 32px 28px;
+  }
+  .loginCard {
+    max-width: 400px;
+    padding: 36px 32px;
+  }
+}
+
+/* Small laptops (768–1024px) — smaller card */
+@media (max-width: 1024px) {
+  .formColumn {
+    padding: 28px 20px;
+  }
+  .loginCard {
+    max-width: 380px;
+    padding: 32px 26px;
+  }
+}
+
+/* Tablets & phones (< 768px):
+   Stack vertically — image on TOP (30vh), card below */
+@media (max-width: 768px) {
+  .splitWrapper {
+    flex-direction: column;
+  }
+
+  .artworkColumn {
+    flex: none;
+    height: 30vh;
+    min-height: 200px;
+  }
+
+  .formColumn {
+    flex: 1;
+    padding: 32px 20px;
+  }
+
+  .loginCard {
+    max-width: 100%;
+    padding: 32px 24px;
+    border-radius: 16px;
+  }
+}
+
+/* Small phones (< 480px) */
+@media (max-width: 480px) {
+  .artworkColumn {
+    height: 25vh;
+    min-height: 160px;
+  }
+
+  .formColumn {
+    padding: 24px 16px;
+  }
+
+  .loginCard {
+    padding: 28px 20px;
+  }
+
+  .tabs {
+    border-radius: 10px;
+  }
+
+  .tab {
+    padding: 9px;
+    font-size: 13px;
+  }
+
+  .header {
+    margin-bottom: 24px;
+  }
+}
+
+/* Very small phones (< 360px) */
+@media (max-width: 360px) {
+  .artworkColumn {
+    height: 20vh;
+    min-height: 130px;
+  }
+
+  .formColumn {
+    padding: 20px 14px;
+  }
+
+  .loginCard {
+    padding: 24px 16px;
+    border-radius: 14px;
+  }
 }

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { useDashboard } from '../layout';
 import styles from './subscriptions.module.css';
 import SearchableCountrySelect from '../../../components/SearchableCountrySelect';
+import { uploadSubscriptionAsset } from '../../../lib/firebase';
 import {
   Plus,
   Edit2,
@@ -281,28 +282,20 @@ export default function SubscriptionsPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
       setFormError(null);
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to upload image.');
-      }
+      setIsSubmitting(true);
+      const downloadUrl = await uploadSubscriptionAsset(file);
 
       if (type === 'logo') {
-        setLogoUrl(data.url);
+        setLogoUrl(downloadUrl);
       } else {
-        setCoverUrl(data.url);
+        setCoverUrl(downloadUrl);
       }
     } catch (err: any) {
       setFormError(err.message || 'An error occurred during upload.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 

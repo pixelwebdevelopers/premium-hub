@@ -31,3 +31,19 @@ export async function uploadReceipt(file: File): Promise<string> {
   const downloadUrl = await getDownloadURL(storageRef);
   return downloadUrl;
 }
+
+/**
+ * Uploads a subscription image (logo/cover) to Firebase Storage
+ * under the subscription_assets folder and returns the public download URL.
+ */
+export async function uploadSubscriptionAsset(file: File): Promise<string> {
+  const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+  const storageRef = ref(storage, `subscription_assets/${fileName}`);
+  
+  // Upload bytes
+  await uploadBytes(storageRef, file);
+  
+  // Get download URL
+  const downloadUrl = await getDownloadURL(storageRef);
+  return downloadUrl;
+}

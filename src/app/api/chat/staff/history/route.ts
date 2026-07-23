@@ -63,7 +63,7 @@ export async function GET(request: Request) {
       },
     });
 
-    const mappedMessages = messages.map((m) => ({
+    const mappedMessages = messages.map((m: any) => ({
       ...m,
       is_historical: true,
       session_created_at: targetSession.created_at,

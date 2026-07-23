@@ -205,12 +205,65 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .tabBtnActive {
   background: #8b5cf6;
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+}
+
+.infoIcon {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.tabBtn:hover .infoIcon {
+  opacity: 1;
+}
+
+.tooltipBox {
+  visibility: hidden;
+  opacity: 0;
+  width: 210px;
+  background-color: #111827;
+  color: #e5e7eb;
+  text-align: left;
+  border-radius: 10px;
+  padding: 10px 12px;
+  position: absolute;
+  z-index: 60;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  pointer-events: none;
+}
+
+.tooltipBox::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #111827 transparent transparent transparent;
+}
+
+.tabBtn:hover .tooltipBox {
+  visibility: visible;
+  opacity: 1;
 }
 
 .badgeIndicator {

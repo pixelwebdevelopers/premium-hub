@@ -47,6 +47,8 @@ export async function GET(request: Request) {
     }
 
     const lastMsgId = lastMsgIdStr ? parseInt(lastMsgIdStr, 10) : 0;
+    
+    // Fetch active session messages
     const messages = await prisma.chatMessage.findMany({
       where: {
         session_id: sessionId,

@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, MessageSquare, ShieldAlert, Loader2, User, Phone, FileText, ExternalLink, AlertCircle } from 'lucide-react';
+import { Send, MessageSquare, ShieldAlert, Loader2, User, Phone, FileText, ExternalLink, AlertCircle, Paperclip, Mic, Square, Download } from 'lucide-react';
 import { useDashboard } from '../layout';
 import styles from './chat.module.css';
+import { uploadChatFile } from '../../../lib/firebase';
 
 interface Message {
   id: number;
@@ -12,6 +13,9 @@ interface Message {
   sender_name: string;
   message: string;
   created_at: string;
+  is_historical?: boolean;
+  session_created_at?: string;
+  session_tracking_id?: string | null;
 }
 
 interface ChatSession {
@@ -19,6 +23,7 @@ interface ChatSession {
   session_token: string;
   customer_name: string;
   customer_email: string | null;
+  tracking_id?: string | null;
   status: 'waiting' | 'active' | 'closed';
   assigned_to_id: number | null;
   created_at: string;
@@ -48,12 +53,7 @@ interface ChatOrder {
   updated_at: string;
 }
 
-const CANNED_RESPONSES = [
-  { label: 'Standard Greeting', text: 'Hello! Thank you for contacting Premium Hub support. How can I help you today?' },
-  { label: 'Request Receipt', text: 'To verify your order, please upload or send a screenshot of your payment receipt.' },
-  { label: 'Credentials Handover', text: 'Your premium account credentials have been configured. Please check your registered email or let me know if you need help.' },
-  { label: 'Close Ticket', text: 'I am marking this support session as resolved. Let us know if you need anything else. Thank you for choosing Premium Hub!' },
-];
+
 
 function playChime() {
   if (typeof window === 'undefined') return;
@@ -92,6 +92,13 @@ function playChime() {
   }
 }
 
+interface DbQuickReply {
+  id: number;
+  shortcut: string;
+  title: string;
+  content: string;
+}
+
 export default function StaffChatPage() {
   const { user: currentUser, isLoading: userLoading } = useDashboard();
   const [waitingQueue, setWaitingQueue] = useState<ChatSession[]>([]);
@@ -106,14 +113,49 @@ export default function StaffChatPage() {
   const [isSubmittingMsg, setIsSubmittingMsg] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
 
+  // Quick Replies Slash Command state
+  const [quickReplies, setQuickReplies] = useState<DbQuickReply[]>([]);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const [quickSearch, setQuickSearch] = useState('');
+  const [selectedQuickIndex, setSelectedQuickIndex] = useState(0);
+
   // Customer Management Right Panel States
   const [customerOrders, setCustomerOrders] = useState<ChatOrder[]>([]);
   const [isUpdatingOrder, setIsUpdatingOrder] = useState<number | null>(null);
+
+  // Lazy loading Chat History States
+  const [historyOffset, setHistoryOffset] = useState(0);
+  const [hasMoreHistory, setHasMoreHistory] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Media / Audio States & Refs
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const prevWaitingLengthRef = useRef(0);
   const lastMessageIdRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const selectedChatIdRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Fetch quick replies list on mount
+  useEffect(() => {
+    async function loadQuickReplies() {
+      try {
+        const res = await fetch('/api/quick-replies');
+        if (res.ok) {
+          const data = await res.json();
+          setQuickReplies(data.quick_replies || []);
+        }
+      } catch (err) {
+        console.error('Error fetching quick replies for chat:', err);
+      }
+    }
+    loadQuickReplies();
+  }, []);
 
   useEffect(() => {
     selectedChatIdRef.current = selectedChatId;
@@ -136,6 +178,9 @@ export default function StaffChatPage() {
     setSelectedChat(null);
     setCustomerOrders([]);
     lastMessageIdRef.current = 0;
+    setHistoryOffset(0);
+    setHasMoreHistory(true);
+    setIsLoadingHistory(false);
   };
 
   // 1. Poll Queues & Staff
@@ -185,22 +230,26 @@ export default function StaffChatPage() {
 
         setSelectedChat(data.session);
 
-        if (data.messages && data.messages.length > 0) {
-          if (!isInitial) {
-            const hasNewCustomerMsg = data.messages.some(
-              (m: Message) => m.sender_type === 'customer'
-            );
-            if (hasNewCustomerMsg) {
-              playChime();
-            }
+        if (isInitial) {
+          const historical = data.historicalMessages || [];
+          const activeMsgs = data.messages || [];
+          setMessages([...historical, ...activeMsgs]);
+          if (activeMsgs.length > 0) {
+            const maxId = Math.max(...activeMsgs.map((m: Message) => m.id));
+            lastMessageIdRef.current = maxId;
           }
-
-          if (isInitial) {
-            setMessages(data.messages);
-          } else {
-            setMessages((prev) => [...prev, ...data.messages]);
+        } else if (data.messages && data.messages.length > 0) {
+          const hasNewCustomerMsg = data.messages.some(
+            (m: Message) => m.sender_type === 'customer'
+          );
+          if (hasNewCustomerMsg) {
+            playChime();
           }
-
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = data.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
           const maxId = Math.max(...data.messages.map((m: Message) => m.id));
           lastMessageIdRef.current = maxId;
         }
@@ -215,15 +264,21 @@ export default function StaffChatPage() {
   }, [selectedChatId]);
 
   // 3. Load Customer Orders history
-  const fetchCustomerOrders = async (email: string) => {
+  const fetchCustomerOrders = async (email?: string | null, trackingId?: string | null) => {
+    if (!email && !trackingId) {
+      setCustomerOrders([]);
+      return;
+    }
     try {
       const res = await fetch('/api/orders');
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.orders) {
-          const filtered = data.orders.filter(
-            (o: ChatOrder) => o.customer_email.toLowerCase() === email.toLowerCase()
-          );
+          const filtered = data.orders.filter((o: ChatOrder) => {
+            const matchesEmail = Boolean(email && o.customer_email.toLowerCase() === email.toLowerCase());
+            const matchesTracking = Boolean(trackingId && o.tracking_id.toLowerCase() === trackingId.toLowerCase());
+            return matchesEmail || matchesTracking;
+          });
           setCustomerOrders(filtered);
         }
       }
@@ -236,16 +291,17 @@ export default function StaffChatPage() {
     if (!selectedChatId) return;
     const currentChat =
       activeChats.find((c) => c.id === selectedChatId) ||
-      waitingQueue.find((c) => c.id === selectedChatId);
+      waitingQueue.find((c) => c.id === selectedChatId) ||
+      selectedChat;
 
-    if (currentChat && currentChat.customer_email) {
-      fetchCustomerOrders(currentChat.customer_email);
+    if (currentChat) {
+      fetchCustomerOrders(currentChat.customer_email, currentChat.tracking_id);
+    } else {
+      setCustomerOrders([]);
     }
-  }, [selectedChatId, activeChats, waitingQueue]);
+  }, [selectedChatId, activeChats, waitingQueue, selectedChat]);
 
-  const handleApplyCanned = (text: string) => {
-    setInputText(text);
-  };
+
 
   // 4. Claim Chat
   const handleClaimChat = async (id: number) => {
@@ -292,6 +348,141 @@ export default function StaffChatPage() {
     }
   };
 
+  const sendMediaMessage = async (url: string, type: 'image' | 'audio') => {
+    if (!selectedChatId) return;
+    const prefix = type === 'image' ? '[image]' : '[audio]';
+    const messageContent = `${prefix}${url}`;
+
+    try {
+      const response = await fetch('/api/chat/message/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: selectedChatId,
+          message: messageContent,
+          sender_type: 'staff',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send media message.');
+      }
+
+      const pollUrl = `/api/chat/staff/messages?session_id=${selectedChatId}&last_message_id=${lastMessageIdRef.current}`;
+      const pollResp = await fetch(pollUrl);
+      if (pollResp.ok) {
+        const pollData = await pollResp.json();
+        if (pollData.messages && pollData.messages.length > 0) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = pollData.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
+          const maxId = Math.max(...pollData.messages.map((m: Message) => m.id));
+          lastMessageIdRef.current = maxId;
+        }
+      }
+    } catch (err) {
+      console.error('Deliver media message error:', err);
+      alert('Media message failed to deliver.');
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const maxSize = 3 * 1024 * 1024; // 3 MB
+    if (file.size > maxSize) {
+      alert('File size exceeds the limit of 3 MB.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const downloadUrl = await uploadChatFile(file);
+      await sendMediaMessage(downloadUrl, 'image');
+    } catch (err) {
+      console.error('File upload error:', err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setIsUploading(true);
+        try {
+          const downloadUrl = await uploadChatFile(audioBlob, 'webm');
+          await sendMediaMessage(downloadUrl, 'audio');
+        } catch (err) {
+          console.error('Audio upload error:', err);
+          alert('Failed to send recorded audio.');
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Microphone access error:', err);
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+      setIsRecording(false);
+    }
+  };
+
+  const loadOlderHistory = async () => {
+    const email = selectedChat?.customer_email;
+    if (!email || !selectedChatId || isLoadingHistory || !hasMoreHistory) return;
+
+    setIsLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/chat/staff/history?email=${encodeURIComponent(email)}&offset=${historyOffset}&current_session_id=${selectedChatId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          if (data.messages && data.messages.length > 0) {
+            setMessages((prev) => {
+              const existingIds = new Set(prev.map((m) => m.id));
+              const newMsgs = data.messages.filter((m: Message) => !existingIds.has(m.id));
+              return [...newMsgs, ...prev];
+            });
+            setHistoryOffset((prev) => prev + 1);
+          }
+          setHasMoreHistory(data.hasMore);
+        }
+      }
+    } catch (err) {
+      console.error("Error loading chat history:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
   // 6. Send Message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -316,12 +507,18 @@ export default function StaffChatPage() {
         throw new Error('Failed to send message.');
       }
 
+      setShowQuickMenu(false);
+
       const pollUrl = `/api/chat/staff/messages?session_id=${selectedChatId}&last_message_id=${lastMessageIdRef.current}`;
       const pollResp = await fetch(pollUrl);
       if (pollResp.ok) {
         const pollData = await pollResp.json();
         if (pollData.messages && pollData.messages.length > 0) {
-          setMessages((prev) => [...prev, ...pollData.messages]);
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = pollData.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
           const maxId = Math.max(...pollData.messages.map((m: Message) => m.id));
           lastMessageIdRef.current = maxId;
         }
@@ -331,6 +528,62 @@ export default function StaffChatPage() {
       alert('Failed to send message. Please retry.');
     } finally {
       setIsSubmittingMsg(false);
+    }
+  };
+
+  // 6.5. Quick Replies slash autocomplete helper functions
+  const filteredQuickReplies = quickReplies.filter(
+    (q) =>
+      q.shortcut.toLowerCase().includes(quickSearch.toLowerCase()) ||
+      q.title.toLowerCase().includes(quickSearch.toLowerCase())
+  );
+
+  const applyQuickReply = (reply: DbQuickReply) => {
+    const lastSlashIdx = inputText.lastIndexOf('/');
+    const textBeforeSlash = lastSlashIdx !== -1 ? inputText.slice(0, lastSlashIdx) : '';
+    const newText = textBeforeSlash ? `${textBeforeSlash}${reply.content} ` : `${reply.content} `;
+    setInputText(newText);
+    setShowQuickMenu(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setInputText(val);
+
+    const cursorPos = e.target.selectionStart || val.length;
+    const textBeforeCursor = val.slice(0, cursorPos);
+    const lastSlashIndex = textBeforeCursor.lastIndexOf('/');
+
+    if (lastSlashIndex !== -1) {
+      const query = textBeforeCursor.slice(lastSlashIndex + 1);
+      if (!query.includes(' ')) {
+        setShowQuickMenu(true);
+        setQuickSearch(query);
+        setSelectedQuickIndex(0);
+        return;
+      }
+    }
+
+    setShowQuickMenu(false);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (showQuickMenu && filteredQuickReplies.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedQuickIndex((prev) => (prev + 1) % filteredQuickReplies.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedQuickIndex((prev) => (prev - 1 + filteredQuickReplies.length) % filteredQuickReplies.length);
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const selected = filteredQuickReplies[selectedQuickIndex] || filteredQuickReplies[0];
+        if (selected) {
+          applyQuickReply(selected);
+        }
+      } else if (e.key === 'Escape') {
+        setShowQuickMenu(false);
+      }
     }
   };
 
@@ -488,14 +741,9 @@ export default function StaffChatPage() {
           </div>
         </aside>
 
-        {/* Conversation Viewport */}
+        {/* Center Panel: Active Chat Stream */}
         <main className={styles.chatViewport}>
-          {isLoading ? (
-            <div className={styles.emptyState}>
-              <Loader2 className={styles.spinner} size={28} color="#8b5cf6" />
-              <span>Loading Live Support console...</span>
-            </div>
-          ) : !selectedChatId ? (
+          {!selectedChatId ? (
             <div className={styles.emptyState}>
               <MessageSquare size={48} color="#a1a1aa" />
               <span style={{ fontWeight: 600 }}>Support Chat Console</span>
@@ -551,7 +799,38 @@ export default function StaffChatPage() {
 
               {/* Chat messages */}
               <div className={styles.messagesScroll}>
-                {messages.map((msg) => {
+                {selectedChat.customer_email && hasMoreHistory && (
+                  <div style={{ display: 'flex', justifyContent: 'center', width: '100%', paddingBottom: '16px' }}>
+                    <button
+                      type="button"
+                      onClick={loadOlderHistory}
+                      disabled={isLoadingHistory}
+                      style={{
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        color: '#8b5cf6',
+                        border: '1px solid rgba(139, 92, 246, 0.2)',
+                        borderRadius: '20px',
+                        padding: '6px 16px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      {isLoadingHistory ? (
+                        <>
+                          <Loader2 className={styles.spinner} size={14} />
+                          <span>Loading History...</span>
+                        </>
+                      ) : (
+                        <span>View Previous Chat Sessions</span>
+                      )}
+                    </button>
+                  </div>
+                )}
+                {messages.map((msg, index) => {
                   let rowClass = styles.rowCustomer;
                   let bubbleClass = styles.bubbleCustomer;
 
@@ -563,15 +842,81 @@ export default function StaffChatPage() {
                     bubbleClass = styles.bubbleStaff;
                   }
 
+                  const prevMsg = index > 0 ? messages[index - 1] : null;
+                  const showHistoricalHeader = msg.is_historical && (!prevMsg || prevMsg.session_id !== msg.session_id);
+
+                  const isImage = msg.message.startsWith('[image]');
+                  const isAudio = msg.message.startsWith('[audio]');
+                  const content = isImage || isAudio ? msg.message.substring(7) : msg.message;
+
                   return (
-                    <div key={msg.id} className={`${styles.messageRow} ${rowClass}`}>
-                      <div className={`${styles.messageBubble} ${bubbleClass}`}>
-                        {msg.sender_name !== 'System' && (
-                          <span className={styles.messageSender}>{msg.sender_name}</span>
-                        )}
-                        {msg.message}
+                    <React.Fragment key={`${msg.session_id}-${msg.id}`}>
+                      {showHistoricalHeader && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '24px 0', width: '100%' }}>
+                          <div style={{ flex: 1, height: '1px', background: 'rgba(139, 92, 246, 0.2)' }} />
+                          <span style={{ margin: '0 12px', fontSize: '11px', color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.1)', padding: '4px 12px', borderRadius: '12px', fontWeight: 600, border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+                            Previous Chat Session (ID: {msg.session_tracking_id || `Session #${msg.session_id}`}) - {msg.session_created_at ? new Date(msg.session_created_at).toLocaleDateString() : ''}
+                          </span>
+                          <div style={{ flex: 1, height: '1px', background: 'rgba(139, 92, 246, 0.2)' }} />
+                        </div>
+                      )}
+
+                      <div className={`${styles.messageRow} ${rowClass}`}>
+                        <div className={`${styles.messageBubble} ${bubbleClass}`} style={{ maxWidth: '80%' }}>
+                          {msg.sender_name !== 'System' && (
+                            <span className={styles.messageSender} style={{ color: msg.is_historical ? '#a78bfa' : undefined }}>
+                              {msg.sender_name} {msg.is_historical && '(Archived)'}
+                            </span>
+                          )}
+                          {isImage ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                              <img
+                                src={content}
+                                alt="attachment"
+                                onClick={() => setLightboxImage(content)}
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '200px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  objectFit: 'cover'
+                                }}
+                              />
+                              <a
+                                href={content}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  color: '#a78bfa',
+                                  textDecoration: 'none',
+                                  fontWeight: 600,
+                                  marginTop: '2px'
+                                }}
+                              >
+                                <Download size={12} />
+                                <span>Download</span>
+                              </a>
+                            </div>
+                          ) : isAudio ? (
+                            <div style={{ marginTop: '4px' }}>
+                              <audio
+                                controls
+                                src={content}
+                                style={{ width: '100%', minWidth: '220px', height: '32px' }}
+                              />
+                            </div>
+                          ) : (
+                            msg.message
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })}
                 <div ref={messagesEndRef} />
@@ -579,23 +924,125 @@ export default function StaffChatPage() {
 
               {/* Input strip */}
               {selectedChat.status === 'active' ? (
-                <form onSubmit={handleSendMessage} className={styles.inputBar}>
-                  <input
-                    type="text"
-                    placeholder="Type support reply here..."
-                    className={styles.inputField}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    disabled={isSubmittingMsg}
-                  />
-                  <button
-                    type="submit"
-                    className={styles.sendBtn}
-                    disabled={!inputText.trim() || isSubmittingMsg}
-                  >
-                    <Send size={16} />
-                  </button>
-                </form>
+                <div style={{ position: 'relative', width: '100%' }}>
+                  {showQuickMenu && filteredQuickReplies.length > 0 && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: '16px',
+                        right: '16px',
+                        marginBottom: '8px',
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '12px',
+                        boxShadow: '0 -10px 25px -5px rgba(0, 0, 0, 0.1), 0 -8px 10px -6px rgba(0, 0, 0, 0.05)',
+                        maxHeight: '240px',
+                        overflowY: 'auto',
+                        zIndex: 100,
+                      }}
+                    >
+                      <div style={{ padding: '8px 14px', background: '#f9fafb', borderBottom: '1px solid #f3f4f6', fontSize: '11px', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Quick Replies (Type / to filter)</span>
+                        <span style={{ fontSize: '10px', color: '#9ca3af', fontWeight: 500 }}>Press Tab/Enter to select</span>
+                      </div>
+                      {filteredQuickReplies.map((reply, idx) => (
+                        <div
+                          key={reply.id}
+                          onClick={() => applyQuickReply(reply)}
+                          style={{
+                            padding: '10px 14px',
+                            cursor: 'pointer',
+                            background: idx === selectedQuickIndex ? 'rgba(139, 92, 246, 0.08)' : 'transparent',
+                            borderLeft: idx === selectedQuickIndex ? '3px solid #8b5cf6' : '3px solid transparent',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px',
+                            transition: 'background 0.15s ease',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ background: 'rgba(139, 92, 246, 0.15)', color: '#7c3aed', fontWeight: 700, fontFamily: 'monospace', fontSize: '12px', padding: '1px 6px', borderRadius: '4px' }}>
+                              /{reply.shortcut}
+                            </span>
+                            <span style={{ fontWeight: 600, fontSize: '13px', color: '#111827' }}>{reply.title}</span>
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {reply.content}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSendMessage} className={styles.inputBar} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileChange}
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                      title="Attach Image (Max 3MB)"
+                      disabled={isUploading || isSubmittingMsg}
+                    >
+                      {isUploading ? (
+                        <Loader2 size={18} className={styles.spinner} />
+                      ) : (
+                        <Paperclip size={18} />
+                      )}
+                    </button>
+
+                    {isRecording ? (
+                      <div style={{ display: 'flex', flex: 1, alignItems: 'center', gap: '8px', background: 'rgba(239, 68, 68, 0.1)', padding: '6px 12px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                        <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', display: 'inline-block' }} />
+                        <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600, flex: 1 }}>Recording...</span>
+                        <button
+                          type="button"
+                          onClick={stopRecording}
+                          style={{ background: '#ef4444', border: 'none', color: 'white', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          title="Stop & Send"
+                        >
+                          <Square size={10} fill="white" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          type="text"
+                          placeholder="Type support reply here... (or type / for Quick Replies)"
+                          className={styles.inputField}
+                          value={inputText}
+                          onChange={handleInputChange}
+                          onKeyDown={handleInputKeyDown}
+                          disabled={isSubmittingMsg || isUploading}
+                          style={{ flex: 1 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={startRecording}
+                          style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                          title="Record Audio"
+                          disabled={isUploading || isSubmittingMsg}
+                        >
+                          <Mic size={18} />
+                        </button>
+                        <button
+                          type="submit"
+                          className={styles.sendBtn}
+                          disabled={!inputText.trim() || isSubmittingMsg || isUploading}
+                        >
+                          <Send size={16} />
+                        </button>
+                      </>
+                    )}
+                  </form>
+                </div>
               ) : (
                 <div
                   style={{
@@ -618,10 +1065,43 @@ export default function StaffChatPage() {
               <span>Fetching conversation metadata...</span>
             </div>
           )}
+
+          {/* Lightbox Overlay */}
+          {lightboxImage && (
+            <div
+              onClick={() => setLightboxImage(null)}
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.85)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 999999,
+                cursor: 'pointer',
+                padding: '20px'
+              }}
+            >
+              <img
+                src={lightboxImage}
+                alt="Attachment Preview"
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '90%',
+                  borderRadius: '8px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                  objectFit: 'contain'
+                }}
+              />
+            </div>
+          )}
         </main>
 
-        {/* Right Panel: Customer Profile & Order Management (Staff View) */}
-        {activeSession && activeSession.customer_email && (
+        {/* Right Panel: Customer Profile & Order History (Staff View) */}
+        {activeSession && (
           <aside className={styles.rightPanel}>
             {/* Customer Details */}
             <div className={styles.rightPanelSection}>
@@ -635,8 +1115,13 @@ export default function StaffChatPage() {
                     {activeSession.customer_name}
                   </div>
                   <div style={{ fontSize: '12px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {activeSession.customer_email}
+                    {activeSession.customer_email || 'No email provided'}
                   </div>
+                  {activeSession.tracking_id && (
+                    <div style={{ fontSize: '12px', color: '#8b5cf6', fontWeight: 600, marginTop: '4px' }}>
+                      Linked Tracking ID: {activeSession.tracking_id}
+                    </div>
+                  )}
                 </div>
                 {customerWhatsapp && (
                   <div style={{ marginTop: '8px' }}>
@@ -662,42 +1147,16 @@ export default function StaffChatPage() {
               </div>
             </div>
 
-            {/* Quick Canned Responses */}
-            <div className={styles.rightPanelSection}>
-              <div className={styles.panelTitle}>
-                <MessageSquare size={14} />
-                <span>Quick Canned Replies</span>
-              </div>
-              <div className={styles.cannedGrid}>
-                {CANNED_RESPONSES.map((resp, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleApplyCanned(resp.text)}
-                    className={styles.cannedBtn}
-                    title={resp.text}
-                  >
-                    <div style={{ fontWeight: 600, fontSize: '11px', textTransform: 'uppercase', color: '#6b7280', marginBottom: '2px' }}>
-                      {resp.label}
-                    </div>
-                    <div style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                      {resp.text}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Active Subscriptions/Orders history */}
+            {/* Active Subscriptions/Orders history (Expanded) */}
             <div className={styles.rightPanelSection} style={{ flex: 1 }}>
               <div className={styles.panelTitle}>
                 <FileText size={14} />
-                <span>Customer Orders ({customerOrders.length})</span>
+                <span>Customer Orders History ({customerOrders.length})</span>
               </div>
-              <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 400px)' }}>
+              <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 220px)' }}>
                 {customerOrders.length === 0 ? (
-                  <div style={{ fontSize: '12.5px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
-                    No orders on record.
+                  <div style={{ fontSize: '12.5px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px 0' }}>
+                    No order history found for this customer.
                   </div>
                 ) : (
                   customerOrders.map((ord) => (

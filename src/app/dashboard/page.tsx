@@ -16,7 +16,8 @@ import {
   AlertCircle,
   X,
   Check,
-  Search
+  Search,
+  Loader2,
 } from 'lucide-react';
 
 interface Order {
@@ -44,6 +45,14 @@ interface Subscription {
   cover_url: string | null;
 }
 
+interface CurrencyRevenue {
+  currency: string;
+  symbol: string;
+  amount: number;
+  formattedAmount: string;
+  count: number;
+}
+
 export default function DashboardHome() {
   const { user } = useDashboard();
   
@@ -67,6 +76,7 @@ export default function DashboardHome() {
   });
   const [recentPurchases, setRecentPurchases] = useState<any[]>([]);
   const [systemLogs, setSystemLogs] = useState<any[]>([]);
+  const [revenueByCurrency, setRevenueByCurrency] = useState<CurrencyRevenue[]>([]);
   const [isOverviewLoading, setIsOverviewLoading] = useState(true);
 
   useEffect(() => {
@@ -110,6 +120,7 @@ export default function DashboardHome() {
             setStats(data.stats);
             setRecentPurchases(data.recentPurchases);
             setSystemLogs(data.systemLogs);
+            setRevenueByCurrency(data.revenueByCurrency || []);
           }
         }
       } catch (err) {
@@ -571,18 +582,6 @@ export default function DashboardHome() {
 
       {/* Statistics Row */}
       <div className={styles.statsGrid}>
-        <div className={`${styles.statCard} glassmorphism`}>
-          <div className={styles.statHeader}>
-            <span className={styles.statLabel}>Total Sales Revenue</span>
-            <div className={`${styles.iconWrapper} ${styles.iconPurple}`}>
-              <DollarSign size={20} />
-            </div>
-          </div>
-          <div className={styles.statValue}>{stats.totalSales}</div>
-          <div className={styles.statFooter}>
-            <span className={styles.trendMuted}>All channels tracked in USD</span>
-          </div>
-        </div>
 
         <div className={`${styles.statCard} glassmorphism`}>
           <div className={styles.statHeader}>
@@ -623,6 +622,70 @@ export default function DashboardHome() {
             <span className={styles.trendMuted}>Localized routers online</span>
           </div>
         </div>
+      </div>
+
+      {/* Revenue Breakdown per Currency */}
+      <div style={{ marginTop: '32px', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <DollarSign size={20} color="#8b5cf6" />
+              <span>Revenue Stats by Currency</span>
+            </h2>
+            <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)', marginTop: '2px', display: 'block' }}>
+              Separate localized earnings breakdown per currency
+            </span>
+          </div>
+        </div>
+
+        {revenueByCurrency.length === 0 ? (
+          <div className="glassmorphism" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13.5px', borderRadius: '12px' }}>
+            No currency revenue recorded yet.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+            {revenueByCurrency.map((item) => (
+              <div
+                key={item.currency}
+                className="glassmorphism"
+                style={{
+                  padding: '20px',
+                  borderRadius: '14px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  border: '1px solid var(--border-light)',
+                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      background: 'rgba(139, 92, 246, 0.15)',
+                      color: '#a78bfa',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      fontSize: '13px',
+                      padding: '3px 9px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(139, 92, 246, 0.25)',
+                    }}
+                  >
+                    {item.currency}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    {item.count} {item.count === 1 ? 'Order' : 'Orders'}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px', letterSpacing: '-0.5px' }}>
+                  {item.formattedAmount}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Grid of Main Panels */}
@@ -693,28 +756,4 @@ export default function DashboardHome() {
   );
 }
 
-// Inline fallback loader helper
-function Loader2({ className, size, color }: { className?: string, size?: number, color?: string }) {
-  return (
-    <svg 
-      className={className} 
-      width={size || 24} 
-      height={size || 24} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke={color || "currentColor"} 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round"
-    >
-      <line x1="12" y1="2" x2="12" y2="6"></line>
-      <line x1="12" y1="18" x2="12" y2="22"></line>
-      <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-      <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-      <line x1="2" y1="12" x2="6" y2="12"></line>
-      <line x1="18" y1="12" x2="22" y2="12"></line>
-      <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-      <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-    </svg>
-  );
-}
+

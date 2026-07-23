@@ -241,6 +241,48 @@ export async function GET(request: Request) {
     const completedOrdersCount = orders.filter((o: LocalOrder) => o.status === 'completed' || o.status === 'paid').length;
     const avgOrderValue = completedOrdersCount > 0 ? (totalSalesUSD / completedOrdersCount) : 0;
 
+    // 7. Revenue Breakdown per Currency
+    const currencyRevenueMap: Record<string, { currency: string; amount: number; count: number; symbol: string }> = {};
+
+    const CURRENCY_SYMBOLS: Record<string, string> = {
+      USD: '$',
+      EUR: '€',
+      GBP: '£',
+      PKR: 'Rs. ',
+      INR: '₹',
+      JPY: '¥',
+      CAD: 'CA$',
+      AUD: 'A$',
+    };
+
+    orders
+      .filter((o: LocalOrder) => o.status === 'completed' || o.status === 'paid')
+      .forEach((o: LocalOrder) => {
+        const curr = (o.currency || 'USD').toUpperCase();
+        const price = Number(o.price);
+
+        if (!currencyRevenueMap[curr]) {
+          currencyRevenueMap[curr] = {
+            currency: curr,
+            amount: 0,
+            count: 0,
+            symbol: CURRENCY_SYMBOLS[curr] || `${curr} `,
+          };
+        }
+        currencyRevenueMap[curr].amount += price;
+        currencyRevenueMap[curr].count += 1;
+      });
+
+    const revenueByCurrency = Object.values(currencyRevenueMap)
+      .map((item) => ({
+        currency: item.currency,
+        symbol: item.symbol,
+        amount: item.amount,
+        formattedAmount: `${item.symbol}${item.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        count: item.count,
+      }))
+      .sort((a, b) => b.amount - a.amount);
+
     return NextResponse.json({
       success: true,
       stats: {
@@ -256,6 +298,7 @@ export async function GET(request: Request) {
       systemLogs,
       monthlyRevenue,
       salesByCountry,
+      revenueByCurrency,
     });
   } catch (error) {
     console.error('GET /api/analytics error:', error);

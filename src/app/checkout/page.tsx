@@ -21,7 +21,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  Layout
+  Layout,
+  Info
 } from 'lucide-react';
 import styles from './checkout.module.css';
 import { uploadReceipt } from '../../lib/firebase';
@@ -32,8 +33,12 @@ interface SubscriptionCountryOverride {
   price: number | null;
   shared_price: number | null;
   private_price: number | null;
+  full_account_price: number | null;
   currency: string;
   description: string;
+  shared_description?: string | null;
+  private_description?: string | null;
+  full_account_description?: string | null;
   is_visible: boolean;
 }
 
@@ -46,8 +51,12 @@ interface Subscription {
   default_price: number | null;
   default_shared_price: number | null;
   default_private_price: number | null;
+  default_full_account_price: number | null;
   default_currency: string;
   default_description: string;
+  default_shared_description?: string | null;
+  default_private_description?: string | null;
+  default_full_account_description?: string | null;
   countries: SubscriptionCountryOverride[];
 }
 
@@ -62,7 +71,7 @@ interface PaymentMethod {
   name: string;
   type: string;
   instructions: string;
-  fields: string; // JSON Array of { label: string, value: string }
+  fields: Array<{ label: string; value: string }> | string;
   is_global: boolean;
   is_active: boolean;
   countries: PaymentMethodCountry[];
@@ -146,7 +155,7 @@ function CheckoutForm() {
   const [copiedTrackingId, setCopiedTrackingId] = useState(false);
 
   // Selected pricing type & duration
-  const [selectedType, setSelectedType] = useState<'shared' | 'private'>('shared');
+  const [selectedType, setSelectedType] = useState<'shared' | 'private' | 'full_account'>('shared');
   const [selectedDuration, setSelectedDuration] = useState<number>(1); // 1, 3, 6, 12
 
   // Fetch logged-in user and fill details
@@ -210,6 +219,21 @@ function CheckoutForm() {
       applyLocation('US', 'United States');
     };
 
+    const setLanguageCookie = (lang: string) => {
+      if (lang === 'en') {
+        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        if (window.location.hostname.includes('.')) {
+          document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+        }
+      } else {
+        const val = `/en/${lang}`;
+        document.cookie = `googtrans=${val}; path=/;`;
+        if (window.location.hostname.includes('.')) {
+          document.cookie = `googtrans=${val}; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+        }
+      }
+    };
+
     const applyLocation = (code: string, name: string) => {
       setCountryCode(code);
       setCountryName(name);
@@ -217,18 +241,22 @@ function CheckoutForm() {
 
       const savedLangPref = localStorage.getItem('user_lang_pref');
       if (savedLangPref) {
-        const hasLangCookie = document.cookie.includes('googtrans=');
-        if (!hasLangCookie || !document.cookie.includes(`googtrans=/en/${savedLangPref}`)) {
-          document.cookie = `googtrans=/en/${savedLangPref}; path=/`;
-          document.cookie = `googtrans=/en/${savedLangPref}; path=/; domain=${window.location.hostname}`;
-          window.location.reload();
+        if (savedLangPref === 'en') {
+          if (document.cookie.includes('googtrans=')) {
+            setLanguageCookie('en');
+            window.location.reload();
+          }
+        } else {
+          if (!document.cookie.includes(`googtrans=/en/${savedLangPref}`)) {
+            setLanguageCookie(savedLangPref);
+            window.location.reload();
+          }
         }
       } else {
         const defaultLang = countryToLangMap[code] || 'en';
         localStorage.setItem('user_lang_pref', defaultLang);
         if (defaultLang !== 'en') {
-          document.cookie = `googtrans=/en/${defaultLang}; path=/`;
-          document.cookie = `googtrans=/en/${defaultLang}; path=/; domain=${window.location.hostname}`;
+          setLanguageCookie(defaultLang);
           window.location.reload();
         }
       }
@@ -237,9 +265,14 @@ function CheckoutForm() {
     fetchGeoLocation();
   }, []);
 
-  // 2. Fetch language cookie
+  // 2. Fetch language cookie or localStorage
   useEffect(() => {
     const getActiveLang = () => {
+      const saved = localStorage.getItem('user_lang_pref');
+      if (saved) {
+        setActiveLang(saved);
+        return;
+      }
       const match = document.cookie.match(/googtrans=\/en\/([^;]+)/);
       if (match) {
         setActiveLang(match[1]);
@@ -303,8 +336,18 @@ function CheckoutForm() {
 
   const handleLangChange = (langCode: string) => {
     localStorage.setItem('user_lang_pref', langCode);
-    document.cookie = `googtrans=/en/${langCode}; path=/`;
-    document.cookie = `googtrans=/en/${langCode}; path=/; domain=${window.location.hostname}`;
+    if (langCode === 'en') {
+      document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      if (window.location.hostname.includes('.')) {
+        document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+      }
+    } else {
+      const val = `/en/${langCode}`;
+      document.cookie = `googtrans=${val}; path=/;`;
+      if (window.location.hostname.includes('.')) {
+        document.cookie = `googtrans=${val}; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+      }
+    }
     window.location.reload();
   };
 
@@ -320,51 +363,106 @@ function CheckoutForm() {
     const privatePrice = override 
       ? (override.private_price !== null && override.private_price !== undefined ? Number(override.private_price) : null)
       : (sub.default_private_price !== null && sub.default_private_price !== undefined ? Number(sub.default_private_price) : null);
+
+    const fullAccountPrice = override 
+      ? (override.full_account_price !== null && override.full_account_price !== undefined ? Number(override.full_account_price) : null)
+      : (sub.default_full_account_price !== null && sub.default_full_account_price !== undefined ? Number(sub.default_full_account_price) : null);
       
     const legacyPrice = override 
       ? (override.price !== null && override.price !== undefined ? Number(override.price) : null)
       : (sub.default_price !== null && sub.default_price !== undefined ? Number(sub.default_price) : null);
 
     const currency = override?.currency || sub.default_currency;
-    const description = override?.description || sub.default_description;
+    const mainDescription = override?.description || sub.default_description;
+
+    const sharedDescription = override 
+      ? (override.shared_description || sub.default_shared_description || mainDescription)
+      : (sub.default_shared_description || mainDescription);
+
+    const privateDescription = override 
+      ? (override.private_description || sub.default_private_description || mainDescription)
+      : (sub.default_private_description || mainDescription);
+
+    const fullAccountDescription = override 
+      ? (override.full_account_description || sub.default_full_account_description || mainDescription)
+      : (sub.default_full_account_description || mainDescription);
 
     const hasShared = sharedPrice !== null;
     const hasPrivate = privatePrice !== null;
+    const hasFullAccount = fullAccountPrice !== null;
 
-    if (!hasShared && !hasPrivate && legacyPrice !== null) {
+    if (!hasShared && !hasPrivate && !hasFullAccount && legacyPrice !== null) {
       return {
         sharedPrice: legacyPrice,
         privatePrice: 0,
+        fullAccountPrice: 0,
         hasShared: true,
         hasPrivate: false,
+        hasFullAccount: false,
         currency,
-        description
+        mainDescription,
+        sharedDescription,
+        privateDescription,
+        fullAccountDescription,
       };
     }
 
     return {
       sharedPrice: sharedPrice !== null ? sharedPrice : (legacyPrice || 0),
       privatePrice: privatePrice !== null ? privatePrice : 0,
+      fullAccountPrice: fullAccountPrice !== null ? fullAccountPrice : 0,
       hasShared,
       hasPrivate,
+      hasFullAccount,
       currency,
-      description
+      mainDescription,
+      sharedDescription,
+      privateDescription,
+      fullAccountDescription,
     };
   };
 
   const pricingOptions = activeSub ? getSubPricingOptions(activeSub) : null;
 
-  const activeType = pricingOptions 
-    ? (pricingOptions.hasShared && selectedType === 'shared' ? 'shared' : (pricingOptions.hasPrivate ? 'private' : 'shared'))
+  const activeType: 'shared' | 'private' | 'full_account' = pricingOptions 
+    ? (
+        selectedType === 'shared' && pricingOptions.hasShared
+          ? 'shared'
+          : selectedType === 'private' && pricingOptions.hasPrivate
+          ? 'private'
+          : selectedType === 'full_account' && pricingOptions.hasFullAccount
+          ? 'full_account'
+          : pricingOptions.hasShared
+          ? 'shared'
+          : pricingOptions.hasPrivate
+          ? 'private'
+          : pricingOptions.hasFullAccount
+          ? 'full_account'
+          : 'shared'
+      )
     : 'shared';
 
   const getSelectedMonthlyPrice = () => {
     if (!pricingOptions) return 0;
     if (activeType === 'shared') {
       return pricingOptions.sharedPrice;
-    } else {
+    } else if (activeType === 'private') {
       return pricingOptions.privatePrice;
+    } else {
+      return pricingOptions.fullAccountPrice;
     }
+  };
+
+  const getSelectedDescription = () => {
+    if (!pricingOptions) return '';
+    if (activeType === 'shared') {
+      return pricingOptions.sharedDescription || pricingOptions.mainDescription;
+    } else if (activeType === 'private') {
+      return pricingOptions.privateDescription || pricingOptions.mainDescription;
+    } else if (activeType === 'full_account') {
+      return pricingOptions.fullAccountDescription || pricingOptions.mainDescription;
+    }
+    return pricingOptions.mainDescription;
   };
 
   const calculatePricing = (monthlyPrice: number, duration: number) => {
@@ -440,7 +538,7 @@ function CheckoutForm() {
 
     const monthlyPrice = getSelectedMonthlyPrice();
     const billing = calculatePricing(monthlyPrice, selectedDuration);
-    const billingTypeLabel = activeType === 'shared' ? 'Shared' : 'Private';
+    const billingTypeLabel = activeType === 'shared' ? 'Shared Screen' : activeType === 'private' ? 'Private Screen' : 'Full Account';
     const durationLabel = selectedDuration === 12 ? '1 Year' : `${selectedDuration} Month${selectedDuration > 1 ? 's' : ''}`;
 
     setIsSubmittingOrder(true);
@@ -908,28 +1006,59 @@ function CheckoutForm() {
                   {/* Pricing Type Toggle Tabs / Badge */}
                   {pricingOptions && (
                     <div style={{ marginTop: '16px' }}>
-                      {pricingOptions.hasShared && pricingOptions.hasPrivate ? (
-                        <div className={styles.tabsContainer}>
+                      <div className={styles.tabsContainer} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {pricingOptions.hasShared && (
                           <button
                             type="button"
-                            className={`${styles.tabBtn} ${selectedType === 'shared' ? styles.tabBtnActive : ''}`}
+                            className={`${styles.tabBtn} ${activeType === 'shared' ? styles.tabBtnActive : ''}`}
                             onClick={() => setSelectedType('shared')}
+                            title="Shared Screen: 1 Profile access with PIN"
                           >
-                            Shared Pricing
+                            <span>Shared Screen</span>
+                            <Info size={13} className={styles.infoIcon} />
+                            <div className={styles.tooltipBox}>
+                              <strong>Shared Screen Option:</strong>
+                              <p style={{ margin: '4px 0 0 0' }}>
+                                {pricingOptions.sharedDescription || '1 Profile access on a shared account with personal PIN protection.'}
+                              </p>
+                            </div>
                           </button>
+                        )}
+                        {pricingOptions.hasPrivate && (
                           <button
                             type="button"
-                            className={`${styles.tabBtn} ${selectedType === 'private' ? styles.tabBtnActive : ''}`}
+                            className={`${styles.tabBtn} ${activeType === 'private' ? styles.tabBtnActive : ''}`}
                             onClick={() => setSelectedType('private')}
+                            title="Private Screen: Dedicated private screen"
                           >
-                            Private Pricing
+                            <span>Private Screen</span>
+                            <Info size={13} className={styles.infoIcon} />
+                            <div className={styles.tooltipBox}>
+                              <strong>Private Screen Option:</strong>
+                              <p style={{ margin: '4px 0 0 0' }}>
+                                {pricingOptions.privateDescription || 'Dedicated private screen with customized viewing profile & PIN.'}
+                              </p>
+                            </div>
                           </button>
-                        </div>
-                      ) : (
-                        <div className={styles.badgeIndicator}>
-                          {pricingOptions.hasShared ? 'Shared Subscription' : 'Private Subscription'}
-                        </div>
-                      )}
+                        )}
+                        {pricingOptions.hasFullAccount && (
+                          <button
+                            type="button"
+                            className={`${styles.tabBtn} ${activeType === 'full_account' ? styles.tabBtnActive : ''}`}
+                            onClick={() => setSelectedType('full_account')}
+                            title="Full Account: Total account control & credentials"
+                          >
+                            <span>Full Account</span>
+                            <Info size={13} className={styles.infoIcon} />
+                            <div className={styles.tooltipBox}>
+                              <strong>Full Account Option:</strong>
+                              <p style={{ margin: '4px 0 0 0' }}>
+                                {pricingOptions.fullAccountDescription || 'Complete account credentials & ownership access with all screens.'}
+                              </p>
+                            </div>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -982,6 +1111,7 @@ function CheckoutForm() {
                   {pricingOptions && (() => {
                     const monthlyPrice = getSelectedMonthlyPrice();
                     const billing = calculatePricing(monthlyPrice, selectedDuration);
+                    const optionLabel = activeType === 'shared' ? 'Shared Screen' : activeType === 'private' ? 'Private Screen' : 'Full Account';
                     return (
                       <div style={{
                         background: 'rgba(255,255,255,0.01)',
@@ -994,7 +1124,7 @@ function CheckoutForm() {
                         gap: '8px'
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#9ca3af' }}>
-                          <span>Plan Rate ({selectedType === 'shared' ? 'Shared' : 'Private'}):</span>
+                          <span>Plan Rate ({optionLabel}):</span>
                           <span>{monthlyPrice.toFixed(2)} {pricingOptions.currency} / mo</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px', color: '#9ca3af' }}>
@@ -1017,7 +1147,7 @@ function CheckoutForm() {
                   })()}
                 </div>
 
-                <p className={styles.description}>{pricingOptions?.description}</p>
+                <p className={styles.description}>{getSelectedDescription()}</p>
               </div>
             </div>
 
@@ -1056,7 +1186,9 @@ function CheckoutForm() {
                       
                       {activePaymentMethod.fields && (() => {
                         try {
-                          const parsed = JSON.parse(activePaymentMethod.fields);
+                          const parsed = typeof activePaymentMethod.fields === 'string'
+                            ? JSON.parse(activePaymentMethod.fields)
+                            : activePaymentMethod.fields;
                           if (Array.isArray(parsed) && parsed.length > 0) {
                             return (
                               <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>

@@ -47,3 +47,18 @@ export async function uploadSubscriptionAsset(file: File): Promise<string> {
   const downloadUrl = await getDownloadURL(storageRef);
   return downloadUrl;
 }
+
+/**
+ * Uploads a chat file (image / audio) to Firebase Storage
+ * under the chat_attachments folder and returns the public download URL.
+ */
+export async function uploadChatFile(fileOrBlob: File | Blob, extension = 'bin'): Promise<string> {
+  const isFile = fileOrBlob instanceof File;
+  const name = isFile ? (fileOrBlob as File).name : `audio_${Date.now()}.${extension}`;
+  const fileName = `${Date.now()}_${name.replace(/\s+/g, '_')}`;
+  const storageRef = ref(storage, `chat_attachments/${fileName}`);
+  
+  await uploadBytes(storageRef, fileOrBlob);
+  const downloadUrl = await getDownloadURL(storageRef);
+  return downloadUrl;
+}

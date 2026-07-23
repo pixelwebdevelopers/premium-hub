@@ -16,6 +16,14 @@ interface SalesByCountryData {
   percentage: number;
 }
 
+interface CurrencyRevenueData {
+  currency: string;
+  symbol: string;
+  amount: number;
+  formattedAmount: string;
+  count: number;
+}
+
 export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -29,6 +37,7 @@ export default function AnalyticsPage() {
   });
   const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenueData[]>([]);
   const [salesByCountry, setSalesByCountry] = useState<SalesByCountryData[]>([]);
+  const [revenueByCurrency, setRevenueByCurrency] = useState<CurrencyRevenueData[]>([]);
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -40,6 +49,7 @@ export default function AnalyticsPage() {
             setStats(data.stats);
             setMonthlyRevenue(data.monthlyRevenue || []);
             setSalesByCountry(data.salesByCountry || []);
+            setRevenueByCurrency(data.revenueByCurrency || []);
           }
         }
       } catch (err) {
@@ -121,6 +131,61 @@ export default function AnalyticsPage() {
             <span className={styles.trendMuted}>Churn reduction</span>
           </div>
         </div>
+      </div>
+
+      {/* Separate Revenue Stats by Currency */}
+      <div style={{ marginTop: '32px', marginBottom: '32px' }}>
+        <h3 className={styles.panelTitle} style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <DollarSign size={18} style={{ color: 'var(--accent-purple)' }} />
+          <span>Revenue Stats by Currency</span>
+        </h3>
+        {revenueByCurrency.length === 0 ? (
+          <div className="glassmorphism" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13.5px', borderRadius: 'var(--border-radius-md)' }}>
+            No revenue per currency recorded yet.
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+            {revenueByCurrency.map((item) => (
+              <div
+                key={item.currency}
+                className="glassmorphism"
+                style={{
+                  padding: '20px',
+                  borderRadius: 'var(--border-radius-md)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  border: '1px solid var(--border-light)',
+                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.03) 100%)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      background: 'rgba(139, 92, 246, 0.15)',
+                      color: 'var(--accent-purple)',
+                      fontWeight: 800,
+                      fontFamily: 'monospace',
+                      fontSize: '13px',
+                      padding: '3px 9px',
+                      borderRadius: '6px',
+                      border: '1px solid rgba(139, 92, 246, 0.25)',
+                    }}
+                  >
+                    {item.currency}
+                  </span>
+                  <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                    {item.count} {item.count === 1 ? 'Order' : 'Orders'}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px', letterSpacing: '-0.5px' }}>
+                  {item.formattedAmount}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Main Charts & Visualizations Grid */}

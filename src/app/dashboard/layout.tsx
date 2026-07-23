@@ -20,6 +20,7 @@ import {
   Wallet,
   ShoppingBag,
   MessageSquare,
+  Zap,
 } from 'lucide-react';
 
 interface UserPermissions {
@@ -64,17 +65,64 @@ export default function DashboardLayout({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [waitingCount, setWaitingCount] = useState(0);
 
+  // Helper to play alarm when a new chat ticket is received
+  const playLoudBeep = () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+
+      setTimeout(() => {
+        try {
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.type = 'sawtooth';
+          osc2.frequency.setValueAtTime(880, ctx.currentTime);
+          gain2.gain.setValueAtTime(0.2, ctx.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+          osc2.start(ctx.currentTime);
+          osc2.stop(ctx.currentTime + 0.5);
+        } catch {}
+      }, 150);
+    } catch (error) {
+      console.warn('Alert beep failed:', error);
+    }
+  };
+
   // Poll waiting chat queue for notifications badge (Staff only)
   useEffect(() => {
     if (!user || user.role === 'customer') return;
 
+    let previousCount = 0;
     const checkWaitingQueue = async () => {
       try {
         const res = await fetch('/api/chat/staff/poll');
         if (res.ok) {
           const data = await res.json();
           const waiting = data.waiting_sessions || [];
-          setWaitingCount(waiting.length);
+          const currentCount = waiting.length;
+          
+          if (currentCount > previousCount && pathname !== '/dashboard/chat') {
+            playLoudBeep();
+          }
+          previousCount = currentCount;
+          setWaitingCount(currentCount);
         }
       } catch (err) {
         console.error('Error checking waiting queue count:', err);
@@ -84,7 +132,7 @@ export default function DashboardLayout({
     checkWaitingQueue();
     const interval = setInterval(checkWaitingQueue, 5000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user, pathname]);
 
   // Fetch logged-in user profile on load
   useEffect(() => {
@@ -163,6 +211,12 @@ export default function DashboardLayout({
           href: '/dashboard/chat',
           label: 'Support Chat',
           icon: MessageSquare,
+          show: user.role === 'admin' || user.permissions?.chat,
+        },
+        {
+          href: '/dashboard/quick-replies',
+          label: 'Quick Replies',
+          icon: Zap,
           show: user.role === 'admin' || user.permissions?.chat,
         },
         { href: '/dashboard/staff', label: 'Staff Access', icon: Users, show: user.role === 'admin' },

@@ -81,8 +81,12 @@ async function main() {
         is_global: true,
         default_shared_price: 4.99,
         default_private_price: 15.99,
+        default_full_account_price: 24.99,
         default_currency: 'USD',
         default_description: 'Watch Netflix movies & TV shows online or stream right to your smart TV, game console, PC, Mac, mobile, tablet and more.',
+        default_shared_description: 'Shared Screen: 1 profile on a shared account with personal PIN lock.',
+        default_private_description: 'Private Screen: Dedicated screen with full Ultra HD playback controls.',
+        default_full_account_description: 'Full Account: Complete 4-screen account with total admin control, custom email & profile access.',
         countries: {
           create: [
             {

@@ -47,16 +47,24 @@ export async function GET(request: Request) {
       default_price: sub.default_price !== null ? Number(sub.default_price) : null,
       default_shared_price: sub.default_shared_price !== null ? Number(sub.default_shared_price) : null,
       default_private_price: sub.default_private_price !== null ? Number(sub.default_private_price) : null,
+      default_full_account_price: sub.default_full_account_price !== null ? Number(sub.default_full_account_price) : null,
       default_currency: sub.default_currency,
       default_description: sub.default_description,
+      default_shared_description: sub.default_shared_description,
+      default_private_description: sub.default_private_description,
+      default_full_account_description: sub.default_full_account_description,
       countries: sub.countries.map((c: typeof sub.countries[0]) => ({
         id: c.id,
         country_code: c.country_code,
         price: c.price !== null ? Number(c.price) : null,
         shared_price: c.shared_price !== null ? Number(c.shared_price) : null,
         private_price: c.private_price !== null ? Number(c.private_price) : null,
+        full_account_price: c.full_account_price !== null ? Number(c.full_account_price) : null,
         currency: c.currency,
         description: c.description,
+        shared_description: c.shared_description,
+        private_description: c.private_description,
+        full_account_description: c.full_account_description,
         is_visible: c.is_visible,
       })),
     }));
@@ -73,8 +81,12 @@ interface CountryInput {
   price?: number | null;
   shared_price?: number | null;
   private_price?: number | null;
+  full_account_price?: number | null;
   currency: string;
   description: string;
+  shared_description?: string | null;
+  private_description?: string | null;
+  full_account_description?: string | null;
   is_visible: boolean;
 }
 
@@ -95,19 +107,24 @@ export async function POST(request: Request) {
       default_price, 
       default_shared_price,
       default_private_price,
+      default_full_account_price,
       default_currency, 
       default_description, 
+      default_shared_description,
+      default_private_description,
+      default_full_account_description,
       countries 
     } = body;
 
-    if (!name || !default_currency || !default_description) {
-      return NextResponse.json({ error: 'Name, default currency, and default description are required.' }, { status: 400 });
+    if (!name || !default_currency) {
+      return NextResponse.json({ error: 'Name and default currency are required.' }, { status: 400 });
     }
 
     if (
       default_price === undefined && 
       default_shared_price === undefined && 
-      default_private_price === undefined
+      default_private_price === undefined &&
+      default_full_account_price === undefined
     ) {
       return NextResponse.json({ error: 'At least one default price tier must be provided.' }, { status: 400 });
     }
@@ -121,16 +138,24 @@ export async function POST(request: Request) {
         default_price: default_price !== undefined && default_price !== null ? Number(default_price) : null,
         default_shared_price: default_shared_price !== undefined && default_shared_price !== null ? Number(default_shared_price) : null,
         default_private_price: default_private_price !== undefined && default_private_price !== null ? Number(default_private_price) : null,
+        default_full_account_price: default_full_account_price !== undefined && default_full_account_price !== null ? Number(default_full_account_price) : null,
         default_currency,
-        default_description,
+        default_description: default_description || '',
+        default_shared_description: default_shared_description || null,
+        default_private_description: default_private_description || null,
+        default_full_account_description: default_full_account_description || null,
         countries: {
           create: (countries || []).map((c: CountryInput) => ({
             country_code: c.country_code,
             price: c.price !== undefined && c.price !== null ? Number(c.price) : null,
             shared_price: c.shared_price !== undefined && c.shared_price !== null ? Number(c.shared_price) : null,
             private_price: c.private_price !== undefined && c.private_price !== null ? Number(c.private_price) : null,
+            full_account_price: c.full_account_price !== undefined && c.full_account_price !== null ? Number(c.full_account_price) : null,
             currency: c.currency,
-            description: c.description,
+            description: c.description || '',
+            shared_description: c.shared_description || null,
+            private_description: c.private_description || null,
+            full_account_description: c.full_account_description || null,
             is_visible: Boolean(c.is_visible),
           })),
         },
@@ -162,19 +187,24 @@ export async function PUT(request: Request) {
       default_price, 
       default_shared_price,
       default_private_price,
+      default_full_account_price,
       default_currency, 
-      default_description, 
+      default_description,
+      default_shared_description,
+      default_private_description,
+      default_full_account_description, 
       countries 
     } = body;
 
-    if (!id || !name || !default_currency || !default_description) {
-      return NextResponse.json({ error: 'ID, name, default currency, and default description are required.' }, { status: 400 });
+    if (!id || !name || !default_currency) {
+      return NextResponse.json({ error: 'ID, name, and default currency are required.' }, { status: 400 });
     }
 
     if (
       default_price === undefined && 
       default_shared_price === undefined && 
-      default_private_price === undefined
+      default_private_price === undefined &&
+      default_full_account_price === undefined
     ) {
       return NextResponse.json({ error: 'At least one default price tier must be provided.' }, { status: 400 });
     }
@@ -192,8 +222,12 @@ export async function PUT(request: Request) {
           default_price: default_price !== undefined && default_price !== null ? Number(default_price) : null,
           default_shared_price: default_shared_price !== undefined && default_shared_price !== null ? Number(default_shared_price) : null,
           default_private_price: default_private_price !== undefined && default_private_price !== null ? Number(default_private_price) : null,
+          default_full_account_price: default_full_account_price !== undefined && default_full_account_price !== null ? Number(default_full_account_price) : null,
           default_currency,
-          default_description,
+          default_description: default_description || '',
+          default_shared_description: default_shared_description || null,
+          default_private_description: default_private_description || null,
+          default_full_account_description: default_full_account_description || null,
         },
       });
 
@@ -211,8 +245,12 @@ export async function PUT(request: Request) {
             price: c.price !== undefined && c.price !== null ? Number(c.price) : null,
             shared_price: c.shared_price !== undefined && c.shared_price !== null ? Number(c.shared_price) : null,
             private_price: c.private_price !== undefined && c.private_price !== null ? Number(c.private_price) : null,
+            full_account_price: c.full_account_price !== undefined && c.full_account_price !== null ? Number(c.full_account_price) : null,
             currency: c.currency,
-            description: c.description,
+            description: c.description || '',
+            shared_description: c.shared_description || null,
+            private_description: c.private_description || null,
+            full_account_description: c.full_account_description || null,
             is_visible: Boolean(c.is_visible),
           })),
         });

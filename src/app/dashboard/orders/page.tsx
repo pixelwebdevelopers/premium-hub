@@ -16,6 +16,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { useDashboard } from '../layout';
+import { fuzzySearchFilter } from '@/lib/fuzzySearch';
 import styles from './orders.module.css';
 
 interface Order {
@@ -134,16 +135,16 @@ export default function AdminOrdersPage() {
   };
 
   // Filtered orders list
-  const filteredOrders = orders.filter((order) => {
-    // Search text check
-    const searchString = `${order.tracking_id} ${order.customer_name} ${order.customer_email} ${order.subscription_name}`.toLowerCase();
-    const matchesSearch = searchString.includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-
-    // Tab check
+  const tabFilteredOrders = orders.filter((order) => {
     if (activeTab === 'all') return true;
     return order.status === activeTab;
   });
+
+  const filteredOrders = fuzzySearchFilter(
+    tabFilteredOrders,
+    searchQuery,
+    (order) => [order.tracking_id, order.customer_name, order.customer_email, order.subscription_name]
+  );
 
   const getWhatsAppLink = (number: string) => {
     // Strip non-digits to get clean phone number

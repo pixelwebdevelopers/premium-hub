@@ -15,12 +15,22 @@ interface StaffPermissions {
   overview: boolean;
 }
 
+interface StaffMetrics {
+  totalSessions: number;
+  activeSessions: number;
+  closedSessions: number;
+  avgResponseTime: string;
+  responseRate: string;
+  resolutionRate: string;
+}
+
 interface StaffMember {
   id: number;
   name: string;
   email: string;
   role: 'staff';
   permissions: StaffPermissions;
+  metrics?: StaffMetrics;
   created_at: string;
 }
 
@@ -267,6 +277,43 @@ export default function StaffPage() {
                   </button>
                 </div>
               </div>
+
+              {member.metrics && (
+                <div style={{ padding: '16px 20px', background: 'rgba(255,255,255,0.01)', borderBottom: '1px solid var(--border-light)' }}>
+                  <span className={styles.permTitle} style={{ marginBottom: '12px', display: 'block' }}>Performance Metrics</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', textAlign: 'center' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Chats</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
+                        {member.metrics.totalSessions}
+                      </div>
+                    </div>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Resp. Time</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#8b5cf6', marginTop: '2px' }}>
+                        {member.metrics.avgResponseTime}
+                      </div>
+                    </div>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-light)' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>Resp. Rate</div>
+                      <div style={{ fontSize: '14px', fontWeight: 800, color: '#10b981', marginTop: '2px' }}>
+                        {member.metrics.responseRate}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '10px', textAlign: 'center' }}>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '6px', borderRadius: '8px', border: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', paddingLeft: '10px', paddingRight: '10px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Resolution</span>
+                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{member.metrics.resolutionRate}</span>
+                    </div>
+                    <div style={{ background: 'var(--bg-secondary)', padding: '6px', borderRadius: '8px', border: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', paddingLeft: '10px', paddingRight: '10px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10.5px', color: 'var(--text-secondary)', fontWeight: 600 }}>Resolved</span>
+                      <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-primary)' }}>{member.metrics.closedSessions}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className={styles.divider} />
 

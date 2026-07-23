@@ -521,3 +521,19 @@
   color: #ffffff;
 }
 
+@media (max-width: 1024px) {
+  .splitView {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar {
+    width: 100%;
+    max-height: 240px;
+    border-right: none;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .chatViewport {
+    min-height: 500px;
+  }
+}
+

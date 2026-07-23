@@ -33,22 +33,85 @@ export async function GET(request: Request) {
       orderBy: { created_at: 'desc' },
     });
 
-    const staffList = staff.map((user: typeof staff[0]) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      permissions: {
-        subscriptions: user.can_view_subscriptions,
-        analytics: user.can_view_analytics,
-        settings: user.can_view_settings,
-        orders: user.can_view_orders,
-        chat: user.can_view_chat,
-        payments: user.can_view_payments,
-        overview: user.can_view_overview,
+    // Fetch all sessions with messages to compute metrics
+    const sessions = await prisma.chatSession.findMany({
+      include: {
+        messages: {
+          orderBy: { created_at: 'asc' },
+        },
       },
-      created_at: user.created_at,
-    }));
+    });
+
+    const staffList = staff.map((user: typeof staff[0]) => {
+      const agentSessions = sessions.filter((s: { assigned_to_id: number | null }) => s.assigned_to_id === user.id);
+      const totalSessions = agentSessions.length;
+      const activeSessions = agentSessions.filter((s: { status: string }) => s.status === 'active').length;
+      const closedSessions = agentSessions.filter((s: { status: string }) => s.status === 'closed').length;
+
+      // Calculate response times
+      let totalResponseTimeMs = 0;
+      let respondedSessionsCount = 0;
+
+      agentSessions.forEach((session: { messages: { sender_type: string; created_at: Date }[] }) => {
+        const firstCustomerMsg = session.messages.find((m: { sender_type: string; created_at: Date }) => m.sender_type === 'customer');
+        if (!firstCustomerMsg) return;
+
+        const firstStaffMsg = session.messages.find(
+          (m: { sender_type: string; created_at: Date }) => m.sender_type === 'staff' && m.created_at > firstCustomerMsg.created_at
+        );
+
+        if (firstStaffMsg) {
+          const diff = firstStaffMsg.created_at.getTime() - firstCustomerMsg.created_at.getTime();
+          totalResponseTimeMs += diff;
+          respondedSessionsCount += 1;
+        }
+      });
+
+      let avgResponseTimeLabel = 'N/A';
+      if (respondedSessionsCount > 0) {
+        const avgMs = totalResponseTimeMs / respondedSessionsCount;
+        const avgSec = Math.round(avgMs / 1000);
+        if (avgSec < 60) {
+          avgResponseTimeLabel = `${avgSec}s`;
+        } else {
+          const avgMin = Math.round(avgSec / 60);
+          avgResponseTimeLabel = `${avgMin}m`;
+        }
+      }
+
+      const responseRate = totalSessions > 0
+        ? Math.round((respondedSessionsCount / totalSessions) * 100)
+        : 100;
+
+      const resolutionRate = totalSessions > 0
+        ? Math.round((closedSessions / totalSessions) * 100)
+        : 100;
+
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        permissions: {
+          subscriptions: user.can_view_subscriptions,
+          analytics: user.can_view_analytics,
+          settings: user.can_view_settings,
+          orders: user.can_view_orders,
+          chat: user.can_view_chat,
+          payments: user.can_view_payments,
+          overview: user.can_view_overview,
+        },
+        metrics: {
+          totalSessions,
+          activeSessions,
+          closedSessions,
+          avgResponseTime: avgResponseTimeLabel,
+          responseRate: `${responseRate}%`,
+          resolutionRate: `${resolutionRate}%`,
+        },
+        created_at: user.created_at,
+      };
+    });
 
     return NextResponse.json({ success: true, staff: staffList });
   } catch (error) {

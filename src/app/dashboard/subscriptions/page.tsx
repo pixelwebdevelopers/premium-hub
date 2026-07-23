@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useDashboard } from '../layout';
+import { fuzzySearchFilter } from '@/lib/fuzzySearch';
 import styles from './subscriptions.module.css';
 import SearchableCountrySelect from '../../../components/SearchableCountrySelect';
 import { uploadSubscriptionAsset } from '../../../lib/firebase';
@@ -29,8 +30,12 @@ interface CountryOverride {
   price?: number | null | '';
   shared_price?: number | null | '';
   private_price?: number | null | '';
+  full_account_price?: number | null | '';
   currency: string;
   description: string;
+  shared_description?: string | null;
+  private_description?: string | null;
+  full_account_description?: string | null;
   is_visible: boolean;
 }
 
@@ -43,8 +48,12 @@ interface Subscription {
   default_price: number | null;
   default_shared_price: number | null;
   default_private_price: number | null;
+  default_full_account_price: number | null;
   default_currency: string;
   default_description: string;
+  default_shared_description?: string | null;
+  default_private_description?: string | null;
+  default_full_account_description?: string | null;
   countries: CountryOverride[];
 }
 
@@ -71,8 +80,12 @@ export default function SubscriptionsPage() {
   const [defaultPrice, setDefaultPrice] = useState<number | ''>('');
   const [defaultSharedPrice, setDefaultSharedPrice] = useState<number | ''>('');
   const [defaultPrivatePrice, setDefaultPrivatePrice] = useState<number | ''>('');
+  const [defaultFullAccountPrice, setDefaultFullAccountPrice] = useState<number | ''>('');
   const [defaultCurrency, setDefaultCurrency] = useState('USD');
   const [defaultDescription, setDefaultDescription] = useState('');
+  const [defaultSharedDescription, setDefaultSharedDescription] = useState('');
+  const [defaultPrivateDescription, setDefaultPrivateDescription] = useState('');
+  const [defaultFullAccountDescription, setDefaultFullAccountDescription] = useState('');
   const [countries, setCountries] = useState<CountryOverride[]>([]);
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -106,8 +119,12 @@ export default function SubscriptionsPage() {
     setDefaultPrice('');
     setDefaultSharedPrice('');
     setDefaultPrivatePrice('');
+    setDefaultFullAccountPrice('');
     setDefaultCurrency('USD');
     setDefaultDescription('');
+    setDefaultSharedDescription('');
+    setDefaultPrivateDescription('');
+    setDefaultFullAccountDescription('');
     setCountries([]);
     setFormError(null);
     setActiveTab('global');
@@ -123,8 +140,12 @@ export default function SubscriptionsPage() {
     setDefaultPrice(sub.default_price !== null && sub.default_price !== undefined ? sub.default_price : '');
     setDefaultSharedPrice(sub.default_shared_price !== null && sub.default_shared_price !== undefined ? sub.default_shared_price : '');
     setDefaultPrivatePrice(sub.default_private_price !== null && sub.default_private_price !== undefined ? sub.default_private_price : '');
+    setDefaultFullAccountPrice(sub.default_full_account_price !== null && sub.default_full_account_price !== undefined ? sub.default_full_account_price : '');
     setDefaultCurrency(sub.default_currency);
-    setDefaultDescription(sub.default_description);
+    setDefaultDescription(sub.default_description || '');
+    setDefaultSharedDescription(sub.default_shared_description || '');
+    setDefaultPrivateDescription(sub.default_private_description || '');
+    setDefaultFullAccountDescription(sub.default_full_account_description || '');
     setCountries([...sub.countries]);
     setFormError(null);
     setActiveTab('global');
@@ -147,8 +168,12 @@ export default function SubscriptionsPage() {
         country_code: unusedCountry.code,
         shared_price: defaultSharedPrice !== '' ? Number(defaultSharedPrice) : '',
         private_price: defaultPrivatePrice !== '' ? Number(defaultPrivatePrice) : '',
+        full_account_price: defaultFullAccountPrice !== '' ? Number(defaultFullAccountPrice) : '',
         currency: unusedCountry.currency,
         description: defaultDescription || `Local pricing package.`,
+        shared_description: defaultSharedDescription || '',
+        private_description: defaultPrivateDescription || '',
+        full_account_description: defaultFullAccountDescription || '',
         is_visible: true,
       },
     ]);
@@ -190,13 +215,13 @@ export default function SubscriptionsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !defaultCurrency || !defaultDescription) {
+    if (!name || !defaultCurrency) {
       setFormError('Please fill in all global required fields.');
       return;
     }
 
-    if (defaultSharedPrice === '' && defaultPrivatePrice === '' && defaultPrice === '') {
-      setFormError('At least one default price tier (Shared or Private) must be provided.');
+    if (defaultSharedPrice === '' && defaultPrivatePrice === '' && defaultFullAccountPrice === '' && defaultPrice === '') {
+      setFormError('At least one default price tier (Shared, Private, or Full Account) must be provided.');
       return;
     }
 
@@ -213,6 +238,7 @@ export default function SubscriptionsPage() {
       if (
         (o.shared_price === undefined || o.shared_price === '' || o.shared_price === null) &&
         (o.private_price === undefined || o.private_price === '' || o.private_price === null) &&
+        (o.full_account_price === undefined || o.full_account_price === '' || o.full_account_price === null) &&
         (o.price === undefined || o.price === '' || o.price === null)
       ) {
         setFormError(`Override for ${o.country_code} must have at least one price tier configured.`);
@@ -232,13 +258,21 @@ export default function SubscriptionsPage() {
       default_price: defaultPrice !== '' ? Number(defaultPrice) : null,
       default_shared_price: defaultSharedPrice !== '' ? Number(defaultSharedPrice) : null,
       default_private_price: defaultPrivatePrice !== '' ? Number(defaultPrivatePrice) : null,
+      default_full_account_price: defaultFullAccountPrice !== '' ? Number(defaultFullAccountPrice) : null,
       default_currency: defaultCurrency,
       default_description: defaultDescription,
+      default_shared_description: defaultSharedDescription || null,
+      default_private_description: defaultPrivateDescription || null,
+      default_full_account_description: defaultFullAccountDescription || null,
       countries: countries.map(c => ({
         ...c,
         price: c.price !== undefined && c.price !== '' && c.price !== null ? Number(c.price) : null,
         shared_price: c.shared_price !== undefined && c.shared_price !== '' && c.shared_price !== null ? Number(c.shared_price) : null,
         private_price: c.private_price !== undefined && c.private_price !== '' && c.private_price !== null ? Number(c.private_price) : null,
+        full_account_price: c.full_account_price !== undefined && c.full_account_price !== '' && c.full_account_price !== null ? Number(c.full_account_price) : null,
+        shared_description: c.shared_description || null,
+        private_description: c.private_description || null,
+        full_account_description: c.full_account_description || null,
       })),
     };
 
@@ -319,10 +353,10 @@ export default function SubscriptionsPage() {
   };
 
   // Filter subscriptions based on search
-  const filteredSubscriptions = subscriptions.filter(
-    (sub) =>
-      sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.countries.some((c) => c.country_code.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredSubscriptions = fuzzySearchFilter(
+    subscriptions,
+    searchQuery,
+    (sub) => [sub.name, ...sub.countries.map((c) => c.country_code)]
   );
 
   return (
@@ -413,17 +447,22 @@ export default function SubscriptionsPage() {
                   <h3 className={styles.subName}>{sub.name}</h3>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
                     {sub.default_shared_price !== null && (
-                      <span className={styles.defaultPrice} style={{ fontSize: '15px', margin: 0 }}>
+                      <span className={styles.defaultPrice} style={{ fontSize: '14px', margin: 0 }}>
                         Shared: {sub.default_currency} {Number(sub.default_shared_price).toFixed(2)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>/ mo</span>
                       </span>
                     )}
                     {sub.default_private_price !== null && (
-                      <span className={styles.defaultPrice} style={{ fontSize: '15px', margin: 0 }}>
+                      <span className={styles.defaultPrice} style={{ fontSize: '14px', margin: 0 }}>
                         Private: {sub.default_currency} {Number(sub.default_private_price).toFixed(2)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>/ mo</span>
                       </span>
                     )}
-                    {sub.default_shared_price === null && sub.default_private_price === null && sub.default_price !== null && (
-                      <span className={styles.defaultPrice} style={{ fontSize: '15px', margin: 0 }}>
+                    {sub.default_full_account_price !== null && (
+                      <span className={styles.defaultPrice} style={{ fontSize: '14px', margin: 0 }}>
+                        Full Account: {sub.default_currency} {Number(sub.default_full_account_price).toFixed(2)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>/ mo</span>
+                      </span>
+                    )}
+                    {sub.default_shared_price === null && sub.default_private_price === null && sub.default_full_account_price === null && sub.default_price !== null && (
+                      <span className={styles.defaultPrice} style={{ fontSize: '14px', margin: 0 }}>
                         Default: {sub.default_currency} {Number(sub.default_price).toFixed(2)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>/ mo</span>
                       </span>
                     )}
@@ -453,6 +492,9 @@ export default function SubscriptionsPage() {
                           }
                           if (override.private_price !== null && override.private_price !== undefined) {
                             pricesStr.push(`P: ${Number(override.private_price).toFixed(2)}`);
+                          }
+                          if (override.full_account_price !== null && override.full_account_price !== undefined) {
+                            pricesStr.push(`F: ${Number(override.full_account_price).toFixed(2)}`);
                           }
                           if (pricesStr.length === 0 && override.price !== null && override.price !== undefined) {
                             pricesStr.push(`${Number(override.price).toFixed(2)}`);
@@ -583,6 +625,22 @@ export default function SubscriptionsPage() {
 
                   <div className={styles.formGroup}>
                     <label className={styles.label}>Default Private Price</label>
+                    <div className={styles.inputWithIcon}>
+                      <CreditCard size={16} className={styles.inputIcon} />
+                      <input
+                        type="number"
+                        step="0.01"
+                        className={styles.input}
+                        placeholder="e.g. 15.99"
+                        value={defaultPrivatePrice}
+                        onChange={(e) => setDefaultPrivatePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Default Full Account Price</label>
                     <div style={{ display: 'flex', gap: '10px' }}>
                       <div className={styles.inputWithIcon} style={{ flexGrow: 1 }}>
                         <CreditCard size={16} className={styles.inputIcon} />
@@ -590,9 +648,9 @@ export default function SubscriptionsPage() {
                           type="number"
                           step="0.01"
                           className={styles.input}
-                          placeholder="e.g. 15.99"
-                          value={defaultPrivatePrice}
-                          onChange={(e) => setDefaultPrivatePrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          placeholder="e.g. 24.99"
+                          value={defaultFullAccountPrice}
+                          onChange={(e) => setDefaultFullAccountPrice(e.target.value === '' ? '' : Number(e.target.value))}
                           disabled={isSubmitting}
                         />
                       </div>
@@ -610,6 +668,42 @@ export default function SubscriptionsPage() {
                         ))}
                       </select>
                     </div>
+                  </div>
+
+                  <div className={styles.formGroupFull}>
+                    <label className={styles.label}>Shared Screen Description</label>
+                    <textarea
+                      className={styles.textarea}
+                      placeholder="Specific description for Shared screen option (e.g. 1 profile access with PIN)..."
+                      value={defaultSharedDescription}
+                      onChange={(e) => setDefaultSharedDescription(e.target.value)}
+                      disabled={isSubmitting}
+                      style={{ minHeight: '60px' }}
+                    />
+                  </div>
+
+                  <div className={styles.formGroupFull}>
+                    <label className={styles.label}>Private Screen Description</label>
+                    <textarea
+                      className={styles.textarea}
+                      placeholder="Specific description for Private screen option (e.g. Dedicated screen with full controls)..."
+                      value={defaultPrivateDescription}
+                      onChange={(e) => setDefaultPrivateDescription(e.target.value)}
+                      disabled={isSubmitting}
+                      style={{ minHeight: '60px' }}
+                    />
+                  </div>
+
+                  <div className={styles.formGroupFull}>
+                    <label className={styles.label}>Full Account Description</label>
+                    <textarea
+                      className={styles.textarea}
+                      placeholder="Specific description for Full Account option (e.g. Entire 4-screen account with total admin credentials access)..."
+                      value={defaultFullAccountDescription}
+                      onChange={(e) => setDefaultFullAccountDescription(e.target.value)}
+                      disabled={isSubmitting}
+                      style={{ minHeight: '60px' }}
+                    />
                   </div>
 
                   <div className={styles.formGroup}>
@@ -699,7 +793,7 @@ export default function SubscriptionsPage() {
                   </div>
 
                   <div className={styles.formGroupFull}>
-                    <label className={styles.label}>Default Service Description *</label>
+                    <label className={styles.label}>Default Service Description (General Fallback) *</label>
                     <textarea
                       className={styles.textarea}
                       placeholder="Input description of package benefits, user accounts, and billing rules..."
@@ -828,6 +922,25 @@ export default function SubscriptionsPage() {
                                     disabled={isSubmitting}
                                   />
                                 </div>
+                              </div>
+                            </div>
+
+                            {/* Local Full Account Price */}
+                            <div className={styles.formGroup}>
+                              <label className={styles.label}>Localized Full Account Price</label>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <div className={styles.inputWithIcon} style={{ flexGrow: 1 }}>
+                                  <CreditCard size={16} className={styles.inputIcon} />
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    className={styles.input}
+                                    placeholder="e.g. 29.99"
+                                    value={override.full_account_price !== undefined && override.full_account_price !== null ? override.full_account_price : ''}
+                                    onChange={(e) => handleOverrideChange(idx, 'full_account_price', e.target.value === '' ? '' : Number(e.target.value))}
+                                    disabled={isSubmitting}
+                                  />
+                                </div>
                                 <span style={{ display: 'flex', alignItems: 'center', padding: '0 12px', background: 'var(--bg-secondary)', border: '1px solid var(--border-light)', borderRadius: 'var(--border-radius-sm)', fontSize: '13.5px', fontWeight: 600 }}>
                                   {override.currency}
                                 </span>
@@ -851,9 +964,51 @@ export default function SubscriptionsPage() {
                               </div>
                             </div>
 
-                            {/* Local Description */}
+                            {/* Local Shared Description */}
                             <div className={styles.formGroupFull}>
-                              <label className={styles.label}>Localized Description *</label>
+                              <label className={styles.label}>Localized Shared Description</label>
+                              <textarea
+                                className={styles.textarea}
+                                rows={2}
+                                placeholder="Localized description for Shared option..."
+                                value={override.shared_description || ''}
+                                onChange={(e) => handleOverrideChange(idx, 'shared_description', e.target.value)}
+                                disabled={isSubmitting}
+                                style={{ minHeight: '50px' }}
+                              />
+                            </div>
+
+                            {/* Local Private Description */}
+                            <div className={styles.formGroupFull}>
+                              <label className={styles.label}>Localized Private Description</label>
+                              <textarea
+                                className={styles.textarea}
+                                rows={2}
+                                placeholder="Localized description for Private option..."
+                                value={override.private_description || ''}
+                                onChange={(e) => handleOverrideChange(idx, 'private_description', e.target.value)}
+                                disabled={isSubmitting}
+                                style={{ minHeight: '50px' }}
+                              />
+                            </div>
+
+                            {/* Local Full Account Description */}
+                            <div className={styles.formGroupFull}>
+                              <label className={styles.label}>Localized Full Account Description</label>
+                              <textarea
+                                className={styles.textarea}
+                                rows={2}
+                                placeholder="Localized description for Full Account option..."
+                                value={override.full_account_description || ''}
+                                onChange={(e) => handleOverrideChange(idx, 'full_account_description', e.target.value)}
+                                disabled={isSubmitting}
+                                style={{ minHeight: '50px' }}
+                              />
+                            </div>
+
+                            {/* Local Description Fallback */}
+                            <div className={styles.formGroupFull}>
+                              <label className={styles.label}>Localized Main Description (Fallback) *</label>
                               <textarea
                                 className={styles.textarea}
                                 rows={2}

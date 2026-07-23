@@ -20,6 +20,7 @@ import {
   Send,
   Menu
 } from 'lucide-react';
+import { fuzzySearchFilter } from '@/lib/fuzzySearch';
 import styles from './landing.module.css';
 
 interface SubscriptionCountryOverride {
@@ -28,8 +29,12 @@ interface SubscriptionCountryOverride {
   price: number | null;
   shared_price: number | null;
   private_price: number | null;
+  full_account_price: number | null;
   currency: string;
   description: string;
+  shared_description?: string | null;
+  private_description?: string | null;
+  full_account_description?: string | null;
   is_visible: boolean;
 }
 
@@ -42,8 +47,12 @@ interface Subscription {
   default_price: number | null;
   default_shared_price: number | null;
   default_private_price: number | null;
+  default_full_account_price: number | null;
   default_currency: string;
   default_description: string;
+  default_shared_description?: string | null;
+  default_private_description?: string | null;
+  default_full_account_description?: string | null;
   countries: SubscriptionCountryOverride[];
 }
 
@@ -164,6 +173,21 @@ export default function LandingPage() {
       applyLocation('US', 'United States');
     };
 
+    const setLanguageCookie = (lang: string) => {
+      if (lang === 'en') {
+        document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+        if (window.location.hostname.includes('.')) {
+          document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+        }
+      } else {
+        const val = `/en/${lang}`;
+        document.cookie = `googtrans=${val}; path=/;`;
+        if (window.location.hostname.includes('.')) {
+          document.cookie = `googtrans=${val}; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+        }
+      }
+    };
+
     const applyLocation = (code: string, name: string) => {
       setCountryCode(code);
       setCountryName(name);
@@ -171,18 +195,22 @@ export default function LandingPage() {
 
       const savedLangPref = localStorage.getItem('user_lang_pref');
       if (savedLangPref) {
-        const hasLangCookie = document.cookie.includes('googtrans=');
-        if (!hasLangCookie || !document.cookie.includes(`googtrans=/en/${savedLangPref}`)) {
-          document.cookie = `googtrans=/en/${savedLangPref}; path=/`;
-          document.cookie = `googtrans=/en/${savedLangPref}; path=/; domain=${window.location.hostname}`;
-          window.location.reload();
+        if (savedLangPref === 'en') {
+          if (document.cookie.includes('googtrans=')) {
+            setLanguageCookie('en');
+            window.location.reload();
+          }
+        } else {
+          if (!document.cookie.includes(`googtrans=/en/${savedLangPref}`)) {
+            setLanguageCookie(savedLangPref);
+            window.location.reload();
+          }
         }
       } else {
         const defaultLang = countryToLangMap[code] || 'en';
         localStorage.setItem('user_lang_pref', defaultLang);
         if (defaultLang !== 'en') {
-          document.cookie = `googtrans=/en/${defaultLang}; path=/`;
-          document.cookie = `googtrans=/en/${defaultLang}; path=/; domain=${window.location.hostname}`;
+          setLanguageCookie(defaultLang);
           window.location.reload();
         }
       }
@@ -191,9 +219,14 @@ export default function LandingPage() {
     fetchGeoLocation();
   }, []);
 
-  // 2. Fetch language from cookies
+  // 2. Fetch language from cookies or localStorage
   useEffect(() => {
     const getActiveLang = () => {
+      const saved = localStorage.getItem('user_lang_pref');
+      if (saved) {
+        setActiveLang(saved);
+        return;
+      }
       const match = document.cookie.match(/googtrans=\/en\/([^;]+)/);
       if (match) {
         setActiveLang(match[1]);
@@ -247,22 +280,35 @@ export default function LandingPage() {
 
   const handleLangChange = (langCode: string) => {
     localStorage.setItem('user_lang_pref', langCode);
-    document.cookie = `googtrans=/en/${langCode}; path=/`;
-    document.cookie = `googtrans=/en/${langCode}; path=/; domain=${window.location.hostname}`;
+    if (langCode === 'en') {
+      document.cookie = 'googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      if (window.location.hostname.includes('.')) {
+        document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+      }
+    } else {
+      const val = `/en/${langCode}`;
+      document.cookie = `googtrans=${val}; path=/;`;
+      if (window.location.hostname.includes('.')) {
+        document.cookie = `googtrans=${val}; path=/; domain=.${window.location.hostname.replace(/^www\./, '')};`;
+      }
+    }
     window.location.reload();
   };
 
-  // Filter subscriptions based on country code and search query
-  const filteredSubscriptions = subscriptions.filter((sub) => {
-    const matchesSearch = sub.name.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
-
+  // Filter subscriptions based on country code and fuzzy search query
+  const countryVisibleSubscriptions = subscriptions.filter((sub) => {
     const override = sub.countries.find((c) => c.country_code === countryCode);
     if (override) {
       return override.is_visible; 
     }
     return sub.is_global; 
   });
+
+  const filteredSubscriptions = fuzzySearchFilter(
+    countryVisibleSubscriptions,
+    searchQuery,
+    (sub) => sub.name
+  );
 
   const getSubDisplayPrice = (sub: Subscription) => {
     const override = sub.countries.find((c) => c.country_code === countryCode);
@@ -274,6 +320,10 @@ export default function LandingPage() {
     const privatePrice = override 
       ? (override.private_price !== null && override.private_price !== undefined ? Number(override.private_price) : null)
       : (sub.default_private_price !== null && sub.default_private_price !== undefined ? Number(sub.default_private_price) : null);
+
+    const fullAccountPrice = override 
+      ? (override.full_account_price !== null && override.full_account_price !== undefined ? Number(override.full_account_price) : null)
+      : (sub.default_full_account_price !== null && sub.default_full_account_price !== undefined ? Number(sub.default_full_account_price) : null);
       
     const legacyPrice = override 
       ? (override.price !== null && override.price !== undefined ? Number(override.price) : null)
@@ -282,16 +332,18 @@ export default function LandingPage() {
     const currency = override?.currency || sub.default_currency;
     const description = override?.description || sub.default_description;
 
+    const availablePrices = [sharedPrice, privatePrice, fullAccountPrice].filter((p): p is number => p !== null);
+
     let finalPrice = legacyPrice || 0;
     let prefix = '';
     let label = '';
-    let pricingType: 'shared' | 'private' | 'both' = 'shared';
+    let pricingType: 'shared' | 'private' | 'full_account' | 'multiple' = 'shared';
 
-    if (sharedPrice !== null && privatePrice !== null) {
-      finalPrice = Math.min(sharedPrice, privatePrice);
+    if (availablePrices.length > 1) {
+      finalPrice = Math.min(...availablePrices);
       prefix = 'From ';
       label = '';
-      pricingType = 'both';
+      pricingType = 'multiple';
     } else if (sharedPrice !== null) {
       finalPrice = sharedPrice;
       prefix = '';
@@ -302,6 +354,11 @@ export default function LandingPage() {
       prefix = '';
       label = 'Private';
       pricingType = 'private';
+    } else if (fullAccountPrice !== null) {
+      finalPrice = fullAccountPrice;
+      prefix = '';
+      label = 'Full Account';
+      pricingType = 'full_account';
     } else if (legacyPrice !== null) {
       finalPrice = legacyPrice;
       prefix = '';

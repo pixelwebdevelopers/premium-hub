@@ -213,19 +213,23 @@ export async function POST(request: Request) {
     });
 
     // Send order confirmation email
-    await sendEmail({
-      to: emailLower,
-      subject: `Order Recieved: ${subscription_name} [${tracking_id}]`,
-      html: getOrderEmailTemplate(
-        customer_name,
-        tracking_id,
-        subscription_name,
-        Number(price).toFixed(2),
-        currency,
-        'unpaid',
-        'We will verify your payment screenshot. Once approved, your subscription will be activated.'
-      ),
-    });
+    try {
+      await sendEmail({
+        to: emailLower,
+        subject: `Order Received: ${subscription_name} [${tracking_id}]`,
+        html: getOrderEmailTemplate(
+          customer_name,
+          tracking_id,
+          subscription_name,
+          Number(price).toFixed(2),
+          currency,
+          'unpaid',
+          'We will verify your payment screenshot. Once approved, your subscription will be activated.'
+        ),
+      });
+    } catch (emailError) {
+      console.error('Order placement email sending failed (non-fatal):', emailError);
+    }
 
     return NextResponse.json({
       success: true,

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, ChevronDown, Check } from 'lucide-react';
 import { COUNTRIES } from '../lib/countries';
+import { fuzzySearchFilter } from '../lib/fuzzySearch';
 
 interface SearchableCountrySelectProps {
   value: string; // country code
@@ -23,12 +24,11 @@ export default function SearchableCountrySelect({
 
   const selectedCountry = COUNTRIES.find((c) => c.code === value);
 
-  // Filter countries based on search
-  const filteredCountries = COUNTRIES.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      c.currency.toLowerCase().includes(search.toLowerCase())
+  // Filter countries based on fuzzy search
+  const filteredCountries = fuzzySearchFilter(
+    COUNTRIES,
+    search,
+    (c) => [c.name, c.code, c.currency]
   );
 
   // Close when clicking outside

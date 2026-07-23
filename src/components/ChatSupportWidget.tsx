@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Loader2, Paperclip, Mic, Square, Download } from 'lucide-react';
 import styles from './ChatSupportWidget.module.css';
+import { uploadChatFile } from '../lib/firebase';
 
 interface Message {
   id: number;
@@ -73,18 +74,25 @@ export default function ChatSupportWidget() {
   // Input forms state
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');
+  const [trackingId, setTrackingId] = useState('');
   const [initialMsg, setInitialMsg] = useState('');
   const [replyText, setReplyText] = useState('');
 
   // Submit triggers
   const [isStartingChat, setIsStartingChat] = useState(false);
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   // Refs
   const lastMessageIdRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const tokenRef = useRef<string | null>(null);
   const isOpenRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     async function fetchUser() {
@@ -148,64 +156,58 @@ export default function ChatSupportWidget() {
   useEffect(() => {
     const pollUpdates = async () => {
       const currentToken = tokenRef.current;
-      if (!currentToken || status === 'closed') return;
+      if (!currentToken) return;
 
       try {
-        const url = `/api/chat/session/poll?token=${currentToken}&last_message_id=${lastMessageIdRef.current}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          // If 404, session might have been purged, reset locally
-          if (response.status === 404) {
-            localStorage.removeItem('premium_hub_chat_token');
-            localStorage.removeItem('premium_hub_chat_status');
-            setSessionToken(null);
-            setStatus('idle');
-            setMessages([]);
-            lastMessageIdRef.current = 0;
-          }
-          return;
-        }
+        const pollUrl = `/api/chat/session/poll?token=${currentToken}&last_message_id=${lastMessageIdRef.current}`;
+        const response = await fetch(pollUrl);
+        if (!response.ok) return;
 
         const data = await response.json();
-        setStatus(data.status);
-        localStorage.setItem('premium_hub_chat_status', data.status);
-        setQueuePosition(data.queue_position);
-        setAgentName(data.agent_name);
+
+        if (data.status) {
+          setStatus(data.status);
+          localStorage.setItem('premium_hub_chat_status', data.status);
+        }
+
+        if (data.agent_name) {
+          setAgentName(data.agent_name);
+        }
+
+        if (data.queue_position !== undefined) {
+          setQueuePosition(data.queue_position);
+        }
 
         if (data.messages && data.messages.length > 0) {
-          // Play chime & increment unread if message was sent by staff
-          const hasNewStaffMsg = data.messages.some(
-            (m: Message) => m.sender_type === 'staff' && m.sender_name !== 'System'
-          );
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = data.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
 
-          if (hasNewStaffMsg) {
-            playChime();
-            if (!isOpenRef.current) {
-              setUnreadCount((c) => c + data.messages.length);
-            }
-          }
-
-          setMessages((prev) => [...prev, ...data.messages]);
-          
           const maxId = Math.max(...data.messages.map((m: Message) => m.id));
           lastMessageIdRef.current = maxId;
+
+          // Sound alert & unread badge if drawer is closed or message is from staff
+          const hasStaffMessage = data.messages.some((m: Message) => m.sender_type === 'staff');
+          if (hasStaffMessage) {
+            playChime();
+            if (!isOpenRef.current) {
+              setUnreadCount((prev) => prev + data.messages.length);
+            }
+          }
         }
-      } catch (error) {
-        console.error('Customer chat poll error:', error);
+      } catch (err) {
+        console.error('Chat poll error:', err);
       }
     };
 
-    let interval: any;
-    if (sessionToken && status !== 'closed') {
-      pollUpdates(); // Initial fetch
-      interval = setInterval(pollUpdates, 2000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [sessionToken, status]);
+    pollUpdates();
+    const interval = setInterval(pollUpdates, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // Handle starting a new chat
+  // Handle start chat session submission
   const handleStartChat = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim() || !initialMsg.trim() || isStartingChat) return;
@@ -219,6 +221,7 @@ export default function ChatSupportWidget() {
         body: JSON.stringify({
           customer_name: customerName.trim(),
           customer_email: customerEmail.trim() || null,
+          tracking_id: trackingId.trim() || null,
           message: initialMsg.trim(),
         }),
       });
@@ -256,6 +259,114 @@ export default function ChatSupportWidget() {
     }
   };
 
+  const sendMediaMessage = async (url: string, type: 'image' | 'audio') => {
+    if (!sessionToken) return;
+    const prefix = type === 'image' ? '[image]' : '[audio]';
+    const messageContent = `${prefix}${url}`;
+
+    try {
+      const response = await fetch('/api/chat/message/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: sessionToken,
+          message: messageContent,
+          sender_type: 'customer',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to deliver media message.');
+      }
+
+      // Refresh messages instantly after sending
+      const pollUrl = `/api/chat/session/poll?token=${sessionToken}&last_message_id=${lastMessageIdRef.current}`;
+      const pollResp = await fetch(pollUrl);
+      if (pollResp.ok) {
+        const pollData = await pollResp.json();
+        if (pollData.messages && pollData.messages.length > 0) {
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = pollData.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
+          const maxId = Math.max(...pollData.messages.map((m: Message) => m.id));
+          lastMessageIdRef.current = maxId;
+        }
+      }
+    } catch (error) {
+      console.error('Deliver media message error:', error);
+      alert('Media message failed to deliver.');
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    const maxSize = 3 * 1024 * 1024; // 3 MB
+    if (file.size > maxSize) {
+      alert('File size exceeds the limit of 3 MB.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const downloadUrl = await uploadChatFile(file);
+      await sendMediaMessage(downloadUrl, 'image');
+    } catch (err) {
+      console.error('File upload error:', err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setIsUploading(true);
+        try {
+          const downloadUrl = await uploadChatFile(audioBlob, 'webm');
+          await sendMediaMessage(downloadUrl, 'audio');
+        } catch (err) {
+          console.error('Audio upload error:', err);
+          alert('Failed to send recorded audio.');
+        } finally {
+          setIsUploading(false);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error('Microphone access error:', err);
+      alert('Could not access microphone. Please check permissions.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+      setIsRecording(false);
+    }
+  };
+
   // Handle sending reply
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -286,7 +397,11 @@ export default function ChatSupportWidget() {
       if (pollResp.ok) {
         const pollData = await pollResp.json();
         if (pollData.messages && pollData.messages.length > 0) {
-          setMessages((prev) => [...prev, ...pollData.messages]);
+          setMessages((prev) => {
+            const existingIds = new Set(prev.map((m) => m.id));
+            const newMsgs = pollData.messages.filter((m: Message) => !existingIds.has(m.id));
+            return [...prev, ...newMsgs];
+          });
           const maxId = Math.max(...pollData.messages.map((m: Message) => m.id));
           lastMessageIdRef.current = maxId;
         }
@@ -331,6 +446,8 @@ export default function ChatSupportWidget() {
     return null;
   }
 
+  const isCustomerLoggedIn = currentUser && currentUser.name && currentUser.email;
+
   return (
     <div className={styles.widgetContainer}>
       {/* Floating Circle Button */}
@@ -358,27 +475,48 @@ export default function ChatSupportWidget() {
             {status === 'idle' ? (
               /* Idle state: show form to register name and initial message */
               <form onSubmit={handleStartChat} className={styles.form}>
+                {isCustomerLoggedIn ? (
+                  <div style={{ background: 'rgba(139, 92, 246, 0.08)', border: '1px solid rgba(139, 92, 246, 0.2)', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px' }}>
+                    <span style={{ color: '#c084fc', fontWeight: 700 }}>Logged in as:</span>
+                    <div style={{ fontWeight: 600, color: '#f3f4f6', marginTop: '2px' }}>{currentUser.name} ({currentUser.email})</div>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className={styles.formLabel}>Your Name *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Enter your name"
+                        className={styles.input}
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className={styles.formLabel}>Email Address (Optional)</label>
+                      <input
+                        type="email"
+                        placeholder="email@example.com"
+                        className={styles.input}
+                        value={customerEmail}
+                        onChange={(e) => setCustomerEmail(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+
                 <div>
-                  <label className={styles.formLabel}>Your Name *</label>
+                  <label className={styles.formLabel}>Order Tracking ID (Optional)</label>
                   <input
                     type="text"
-                    required
-                    placeholder="Enter your name"
+                    placeholder="e.g. TRK-987654"
                     className={styles.input}
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    value={trackingId}
+                    onChange={(e) => setTrackingId(e.target.value)}
                   />
                 </div>
-                <div>
-                  <label className={styles.formLabel}>Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    placeholder="email@example.com"
-                    className={styles.input}
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                  />
-                </div>
+
                 <div>
                   <label className={styles.formLabel}>How can we help you? *</label>
                   <textarea
@@ -414,8 +552,13 @@ export default function ChatSupportWidget() {
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>
                   
                   {agentName && (
-                    <div style={{ fontSize: '11px', color: '#c084fc', textAlign: 'center', background: 'rgba(192, 132, 252, 0.05)', padding: '6px', borderRadius: '6px', marginBottom: '8px' }}>
-                      Support Agent <strong>{agentName}</strong> is handling this chat.
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#c084fc', background: 'rgba(192, 132, 252, 0.05)', padding: '6px 12px', borderRadius: '8px', marginBottom: '10px' }}>
+                      <span>Agent <strong>{agentName}</strong> is handling this chat.</span>
+                      {status === 'active' && (
+                        <button type="button" onClick={handleCancelChat} style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 600, cursor: 'pointer' }}>
+                          End Session
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -431,13 +574,62 @@ export default function ChatSupportWidget() {
                       bubbleClass = styles.bubbleCustomer;
                     }
 
+                    const isImage = msg.message.startsWith('[image]');
+                    const isAudio = msg.message.startsWith('[audio]');
+                    const content = isImage || isAudio ? msg.message.substring(7) : msg.message;
+
                     return (
-                      <div key={msg.id} className={`${styles.msgRow} ${rowClass}`}>
-                        <div className={`${styles.bubble} ${bubbleClass}`}>
+                      <div key={`${msg.session_id}-${msg.id}`} className={`${styles.msgRow} ${rowClass}`}>
+                        <div className={`${styles.bubble} ${bubbleClass}`} style={{ maxWidth: '85%' }}>
                           {msg.sender_name !== 'System' && (
                             <span className={styles.bubbleSender}>{msg.sender_name}</span>
                           )}
-                          {msg.message}
+                          {isImage ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                              <img
+                                src={content}
+                                alt="attachment"
+                                onClick={() => setLightboxImage(content)}
+                                style={{
+                                  maxWidth: '100%',
+                                  maxHeight: '160px',
+                                  borderRadius: '8px',
+                                  cursor: 'pointer',
+                                  border: '1px solid rgba(255,255,255,0.1)',
+                                  objectFit: 'cover'
+                                }}
+                              />
+                              <a
+                                href={content}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '11px',
+                                  color: '#a78bfa',
+                                  textDecoration: 'none',
+                                  fontWeight: 600,
+                                  marginTop: '2px'
+                                }}
+                              >
+                                <Download size={12} />
+                                <span>Download</span>
+                              </a>
+                            </div>
+                          ) : isAudio ? (
+                            <div style={{ marginTop: '4px' }}>
+                              <audio
+                                controls
+                                src={content}
+                                style={{ width: '100%', minWidth: '180px', height: '32px' }}
+                              />
+                            </div>
+                          ) : (
+                            msg.message
+                          )}
                         </div>
                       </div>
                     );
@@ -452,21 +644,67 @@ export default function ChatSupportWidget() {
           {status !== 'idle' && status !== 'waiting' && (
             <div className={styles.footerBar}>
               {status === 'active' ? (
-                <form onSubmit={handleSendReply} style={{ display: 'flex', width: '100%', gap: '8px' }}>
+                <form onSubmit={handleSendReply} style={{ display: 'flex', width: '100%', gap: '8px', alignItems: 'center' }}>
                   <input
-                    type="text"
-                    placeholder="Type message here..."
-                    className={styles.footerInput}
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    disabled={isSendingReply}
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    style={{ display: 'none' }}
                   />
-                  <button type="submit" className={styles.sendBtn} disabled={!replyText.trim() || isSendingReply}>
-                    <Send size={14} />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                    title="Attach Image (Max 3MB)"
+                    disabled={isUploading || isSendingReply}
+                  >
+                    {isUploading ? (
+                      <Loader2 size={16} className={styles.spinner} />
+                    ) : (
+                      <Paperclip size={16} />
+                    )}
                   </button>
-                  <button type="button" onClick={handleCancelChat} className={styles.cancelSessionBtn} style={{ padding: '0 10px' }} title="Close support chat">
-                    X
-                  </button>
+
+                  {isRecording ? (
+                    <div style={{ display: 'flex', flex: 1, alignItems: 'center', gap: '8px', background: 'rgba(239, 68, 68, 0.1)', padding: '6px 12px', borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                      <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', display: 'inline-block' }} />
+                      <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600, flex: 1 }}>Recording...</span>
+                      <button
+                        type="button"
+                        onClick={stopRecording}
+                        style={{ background: '#ef4444', border: 'none', color: 'white', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                        title="Stop & Send"
+                      >
+                        <Square size={10} fill="white" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <input
+                        type="text"
+                        placeholder="Type message here..."
+                        className={styles.footerInput}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        disabled={isSendingReply || isUploading}
+                        style={{ flex: 1 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={startRecording}
+                        style={{ background: 'transparent', border: 'none', color: '#a1a1aa', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4px' }}
+                        title="Record Audio"
+                        disabled={isUploading || isSendingReply}
+                      >
+                        <Mic size={16} />
+                      </button>
+                      <button type="submit" className={styles.sendBtn} disabled={!replyText.trim() || isSendingReply || isUploading}>
+                        <Send size={14} />
+                      </button>
+                    </>
+                  )}
                 </form>
               ) : (
                 <div style={{ display: 'flex', width: '100%', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
@@ -478,6 +716,39 @@ export default function ChatSupportWidget() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Lightbox Overlay */}
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 999999,
+            cursor: 'pointer',
+            padding: '20px'
+          }}
+        >
+          <img
+            src={lightboxImage}
+            alt="Attachment Preview"
+            style={{
+              maxWidth: '100%',
+              maxHeight: '90%',
+              borderRadius: '8px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+              objectFit: 'contain'
+            }}
+          />
         </div>
       )}
     </div>

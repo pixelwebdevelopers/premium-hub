@@ -2,32 +2,6 @@ import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
 
-// Load environment variables for SMTP
-const SMTP_HOST = process.env.SMTP_HOST || '';
-const SMTP_PORT = Number(process.env.SMTP_PORT) || 587;
-const SMTP_USER = process.env.SMTP_USER || '';
-const SMTP_PASS = process.env.SMTP_PASSWORD || '';
-const SMTP_FROM = process.env.SMTP_FROM || '"Premium Hub" <noreply@premiumhub.com>';
-
-// Create transporter if SMTP configuration is present
-let transporter: nodemailer.Transporter | null = null;
-if (SMTP_HOST) {
-  const mailConfig: any = {
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // true for port 465, false for other ports
-  };
-  
-  if (SMTP_USER && SMTP_PASS) {
-    mailConfig.auth = {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    };
-  }
-  
-  transporter = nodemailer.createTransport(mailConfig);
-}
-
 interface EmailOptions {
   to: string;
   subject: string;
@@ -35,24 +9,76 @@ interface EmailOptions {
   text?: string;
 }
 
+// Dynamically create & get transporter based on current process.env
+function getTransporter(): { transporter: nodemailer.Transporter | null; fromAddress: string } {
+  const host = (process.env.SMTP_HOST || '').trim();
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const user = (process.env.SMTP_USER || '').trim();
+  const pass = (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
+  
+  let rawFrom = (process.env.SMTP_FROM || '').trim();
+  if (!rawFrom) {
+    rawFrom = user ? `"Premium Hub" <${user}>` : '"Premium Hub" <noreply@premiumhub.com>';
+  }
+  
+  // Clean up and fix unclosed angle brackets in SMTP_FROM (e.g., "Premium Hub" <noreply@premiumhub.com)
+  if (rawFrom.includes('<') && !rawFrom.includes('>')) {
+    rawFrom = `${rawFrom}>`;
+  }
+  const fromAddress = rawFrom;
+
+  if (!host) {
+    return { transporter: null, fromAddress };
+  }
+
+  const isSecure = port === 465;
+
+  const mailConfig: Record<string, unknown> = {
+    host,
+    port,
+    secure: isSecure,
+    tls: {
+      rejectUnauthorized: false,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  };
+
+  if (user && pass) {
+    mailConfig.auth = {
+      user,
+      pass,
+    };
+  }
+
+  const transporter = nodemailer.createTransport(mailConfig);
+  return { transporter, fromAddress };
+}
+
 export async function sendEmail({ to, subject, html, text }: EmailOptions): Promise<boolean> {
+  const { transporter, fromAddress } = getTransporter();
+  const recipient = to.trim();
+
   const mailOptions = {
-    from: SMTP_FROM,
-    to,
-    subject,
+    from: fromAddress,
+    to: recipient,
+    subject: subject.trim(),
     html,
-    text: text || subject, // fallback text version
+    text: text || subject,
   };
 
   if (transporter) {
     try {
-      await transporter.sendMail(mailOptions);
-      console.log(`📨 [SMTP EMAIL SENT] Subject: "${subject}" to ${to}`);
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`📨 [SMTP EMAIL SENT] Subject: "${subject}" to ${recipient} (MessageId: ${info.messageId || 'N/A'})`);
       return true;
     } catch (error) {
-      console.error('❌ [SMTP EMAIL ERROR] Failed to send email via SMTP:', error);
-      // Fallback to writing preview file on error
+      console.error(`❌ [SMTP EMAIL ERROR] Failed to send email to ${recipient} via SMTP:`, error);
+      // Fallback to writing preview file on error if local/dev
     }
+  } else {
+    console.warn(`⚠️ [SMTP CONFIG MISSING] SMTP_HOST environment variable is not configured. Falling back to preview output.`);
   }
 
   // Fallback / Development mode: Write HTML preview file
@@ -63,11 +89,10 @@ export async function sendEmail({ to, subject, html, text }: EmailOptions): Prom
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const sanitizedTo = to.replace(/[^a-zA-Z0-9]/g, '_');
+    const sanitizedTo = recipient.replace(/[^a-zA-Z0-9]/g, '_');
     const fileName = `${timestamp}_${sanitizedTo}.html`;
     const filePath = path.join(previewDir, fileName);
 
-    // Style the preview container a bit so it looks nice in development
     const styledHtml = `
       <!DOCTYPE html>
       <html>
@@ -101,7 +126,8 @@ export async function sendEmail({ to, subject, html, text }: EmailOptions): Prom
         <body>
           <div class="preview-header">
             <h2 style="margin: 0; color: #8b5cf6;">Premium Hub Email Sandbox</h2>
-            <div class="preview-meta"><strong>TO:</strong> ${to}</div>
+            <div class="preview-meta"><strong>FROM:</strong> ${fromAddress}</div>
+            <div class="preview-meta"><strong>TO:</strong> ${recipient}</div>
             <div class="preview-meta"><strong>SUBJECT:</strong> ${subject}</div>
             <div class="preview-meta"><strong>SENT:</strong> ${new Date().toLocaleString()}</div>
           </div>
@@ -114,13 +140,11 @@ export async function sendEmail({ to, subject, html, text }: EmailOptions): Prom
 
     fs.writeFileSync(filePath, styledHtml, 'utf8');
 
-    // Terminal color tags are not supported, so use simple text styling
     console.log('\n================================================================');
     console.log(`📬 [EMAIL PREVIEW GENERATED]`);
     console.log(`👉 Subject: "${subject}"`);
-    console.log(`👉 Recipient: ${to}`);
+    console.log(`👉 Recipient: ${recipient}`);
     console.log(`👉 Local File Path: ${filePath}`);
-    console.log(`👉 View Preview: http://localhost:3000/email-previews/${fileName}`);
     console.log('================================================================\n');
 
     return true;
@@ -180,8 +204,8 @@ export function getOrderEmailTemplate(
   };
 
   const statusLabel: Record<string, string> = {
-    unpaid: 'Unpaid / Pending Receipt Review',
-    paid: 'Paid / Fulfilment In Progress',
+    unpaid: 'Unpaid / Pending Review',
+    paid: 'Paid / Processing',
     completed: 'Active / Completed',
   };
 
@@ -196,7 +220,7 @@ export function getOrderEmailTemplate(
       </div>
       
       <div style="background: rgba(255,255,255,0.02); padding: 24px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); margin-bottom: 20px;">
-        <h3 style="margin-top: 0; color: #ffffff; font-size: 18px;">Order Placed Successfully!</h3>
+        <h3 style="margin-top: 0; color: #ffffff; font-size: 18px;">Order Details</h3>
         <p style="color: #a1a1aa; line-height: 1.6; font-size: 14px;">
           Hello <strong>${customerName}</strong>,<br/><br/>
           Your order has been recorded. Below are your order details and tracking instructions.
@@ -228,7 +252,7 @@ export function getOrderEmailTemplate(
 
       ${instructions ? `
       <div style="background: rgba(245, 158, 11, 0.05); padding: 18px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.15); margin-bottom: 20px;">
-        <h4 style="margin: 0 0 8px 0; color: #f59e0b; font-size: 14px;">Payment Instructions</h4>
+        <h4 style="margin: 0 0 8px 0; color: #f59e0b; font-size: 14px;">Next Steps / Instructions</h4>
         <div style="color: #d4d4d8; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap;">${instructions}</div>
       </div>
       ` : ''}

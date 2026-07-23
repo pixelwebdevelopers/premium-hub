@@ -19,25 +19,52 @@ async function main() {
   console.log('--- Starting Database Migration & Seeding Hook ---');
 
   try {
-    let migrateCmd = '';
-    
-    // Check if there are migration files
     const hasMigrations = fs.existsSync(migrationsDir) && 
       fs.readdirSync(migrationsDir).some(file => fs.statSync(path.join(migrationsDir, file)).isDirectory());
 
     if (hasMigrations) {
       console.log('Migrations directory detected with migrations. Running "prisma migrate deploy"...');
-      migrateCmd = 'npx prisma migrate deploy';
+      try {
+        console.log('Executing: npx prisma migrate deploy');
+        const output = execSync('npx prisma migrate deploy', {
+          cwd: path.resolve(__dirname, '..'),
+        });
+        console.log(output.toString());
+      } catch (err) {
+        const errorOutput = (err.stdout ? err.stdout.toString() : '') + '\n' + (err.stderr ? err.stderr.toString() : '');
+        if (errorOutput.includes('P3005')) {
+          const migrationFolders = fs.readdirSync(migrationsDir)
+            .filter(file => fs.statSync(path.join(migrationsDir, file)).isDirectory())
+            .sort();
+          const firstMigration = migrationFolders[0];
+          if (firstMigration) {
+            console.log(`--- Database is not empty but lacks migration history. Baselining database by marking "${firstMigration}" as applied... ---`);
+            execSync(`npx prisma migrate resolve --applied ${firstMigration}`, {
+              stdio: 'inherit',
+              cwd: path.resolve(__dirname, '..'),
+            });
+            console.log('Baselining complete. Retrying "npx prisma migrate deploy"...');
+            execSync('npx prisma migrate deploy', {
+              stdio: 'inherit',
+              cwd: path.resolve(__dirname, '..'),
+            });
+          } else {
+            throw err;
+          }
+        } else {
+          console.error('Migration failed:');
+          console.error(errorOutput);
+          throw err;
+        }
+      }
     } else {
       console.log('No migrations detected. Running "prisma db push" to sync database schema...');
-      migrateCmd = 'npx prisma db push --accept-data-loss';
+      console.log('Executing: npx prisma db push --accept-data-loss');
+      execSync('npx prisma db push --accept-data-loss', {
+        stdio: 'inherit',
+        cwd: path.resolve(__dirname, '..'),
+      });
     }
-
-    console.log(`Executing: ${migrateCmd}`);
-    execSync(migrateCmd, {
-      stdio: 'inherit',
-      cwd: path.resolve(__dirname, '..'),
-    });
     console.log('Database schema migration/push completed successfully.');
 
     // Run seeder
